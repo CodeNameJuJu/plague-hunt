@@ -28,6 +28,8 @@ const W_PALISADE = 23; // the cordon — sharpened stakes, lashed together
 const W_CANVAS = 24; // tent canvas — the camp's walls
 const W_LAMP = 26; // lantern glass — the lamp posts' glowing heads
 const W_FOLIAGE = 27; // clipped leaf mass — trees, shrubs, planters
+const W_ROCK = 28; // uncoursed crag — the mountain pass
+const W_PEAK = 29; // snow-capped crag — the ridge's tallest cells
 const W_LEAF = 19; // door leaf texture — drawn on the swinging prop
 const W_QUAR = 20; // quarantine quarter — patched, boarded, marked
 const W_LEAF_MARK = 22; // quarter door leaf — daubed with the whitewash X
@@ -1491,17 +1493,21 @@ function farmlandMap(): GameMap {
 // Filmed both in daylight and at night.
 function mountainMap(): GameMap {
   const m = introShell(40, 20, F_DIRT);
-  // The pass walls — the kink mid-run makes the road read as a switchback.
+  // The pass walls — bare granite, the kink mid-run making the road read as
+  // a switchback. Scattered cells rise higher and wear the snow texture, so
+  // the skyline crests white like a ridgeline of peaks.
   for (let x = 0; x < m.w; x++) {
     const top = x < 19 ? 6 : 8;
     const bot = x < 19 ? 13 : 15;
     for (let y = 0; y <= top; y++) {
-      m.walls[y * m.w + x] = W_STONE;
-      m.wallH[y * m.w + x] = 2.3 + ((x * 7 + y * 3) % 3) * 0.3;
+      const peak = (x * 13 + y * 5) % 11 === 0;
+      m.walls[y * m.w + x] = peak ? W_PEAK : W_ROCK;
+      m.wallH[y * m.w + x] = peak ? 4.4 + ((x * 3 + y) % 3) * 0.5 : 2.3 + ((x * 7 + y * 3) % 3) * 0.3;
     }
     for (let y = bot; y < m.h; y++) {
-      m.walls[y * m.w + x] = W_STONE;
-      m.wallH[y * m.w + x] = 2.3 + ((x * 5 + y * 11) % 3) * 0.3;
+      const peak = (x * 11 + y * 7) % 13 === 0;
+      m.walls[y * m.w + x] = peak ? W_PEAK : W_ROCK;
+      m.wallH[y * m.w + x] = peak ? 4.2 + ((x * 5 + y) % 3) * 0.5 : 2.3 + ((x * 5 + y * 11) % 3) * 0.3;
     }
   }
   // Scree and scrub — boulder prisms and the odd dead pine at the margins.
@@ -1510,7 +1516,7 @@ function mountainMap(): GameMap {
     const py = i % 2 ? 12.4 : 7.2;
     m.props.push({
       x: px, y: py, block: 0.22,
-      faces: prismFaces(px, py, 0.16 + (i % 3) * 0.05, 6, 0.2 + (i % 3) * 0.08, W_STONE, i * 0.6),
+      faces: prismFaces(px, py, 0.16 + (i % 3) * 0.05, 6, 0.2 + (i % 3) * 0.08, W_ROCK, i * 0.6),
     });
   }
   m.props.push(PROP_BUILDERS.deadTree(9.5, 7.6));

@@ -1440,6 +1440,80 @@ function daySky(): Texture {
   return tex;
 }
 
+// Mountain crag — uncoursed granite. The tone shifts in broad jagged facets
+// rather than laid courses, strata seams run diagonal, and fractures snake
+// down the face. Nothing about it is built. The pass walls in the intro.
+function rockWall(): Texture {
+  const tex = makeTex();
+  const rand = rng(41);
+  for (let y = 0; y < TEX_SIZE; y++) {
+    for (let x = 0; x < TEX_SIZE; x++) {
+      // Broad sheared facets — irregular, overlapping, keyed off a skewed
+      // lattice so no course lines ever form.
+      const facet = Math.floor((x + y * 0.35) / 13) + Math.floor(y / 11) * 3;
+      let v = 74 + ((facet * 2654435761) % 31) - 12;
+      // Strata seams — faint diagonals the face splits along.
+      if ((x + y * 2) % 17 < 2) v -= 20;
+      setPx(tex, x, y, v, v - 4, v - 10);
+    }
+  }
+  // Fractures — jagged vertical cracks wandering down the face.
+  for (let i = 0; i < 5; i++) {
+    let cx = Math.floor(rand() * TEX_SIZE);
+    for (let y = 0; y < TEX_SIZE; y++) {
+      const i3 = (y * TEX_SIZE + (cx % TEX_SIZE)) * 3;
+      tex.data[i3] *= 0.45;
+      tex.data[i3 + 1] *= 0.45;
+      tex.data[i3 + 2] *= 0.45;
+      if (rand() < 0.45) cx += rand() < 0.5 ? 1 : -1;
+    }
+  }
+  // Pale chips and lichen stains where the face is exposed.
+  for (let i = 0; i < 90; i++) {
+    const x = Math.floor(rand() * TEX_SIZE);
+    const y = Math.floor(rand() * TEX_SIZE);
+    setPx(tex, x, y, 112, 106, 92);
+  }
+  for (let i = 0; i < 12; i++) {
+    const x = Math.floor(rand() * TEX_SIZE);
+    const y = Math.floor(rand() * TEX_SIZE);
+    const v = 66 + rand() * 14;
+    setPx(tex, x, y, v * 0.75, v, v * 0.55); // grey-green lichen
+  }
+  addNoise(tex, rand, 9);
+  return tex;
+}
+
+// The same crag capped by snow — drifts fill the upper half and tongues of
+// white run down between the rock ribs. Only the pass's tallest cells wear
+// it, so the ridge crests white above the bare stone below.
+function snowCragWall(): Texture {
+  const tex = rockWall();
+  const rand = rng(67);
+  for (let x = 0; x < TEX_SIZE; x++) {
+    // The snow line sags and swells along the ridge — never a straight cut.
+    const depth = 26 + Math.sin(x * 0.35) * 7 + Math.sin(x * 1.7) * 4 + rand() * 5;
+    for (let y = 0; y < Math.min(TEX_SIZE, depth); y++) {
+      const d = y / depth; // 0 at the crest — brightest snow sits high
+      const sh = 236 - d * 36 + (rand() < 0.05 ? 18 : 0);
+      setPx(tex, x, y, sh, sh + 4, Math.min(255, sh + 14)); // blued in shadow
+    }
+    // A tongue reaching further down — the couloir between ribs.
+    if (x % 9 === 0) {
+      const tail = depth + 8 + rand() * 10;
+      for (let y = Math.floor(depth); y < Math.min(TEX_SIZE, tail); y++) {
+        const i3 = (y * TEX_SIZE + x) * 3;
+        const f = 1.6 - (y - depth) * 0.08;
+        tex.data[i3] = Math.min(255, tex.data[i3] * f + 40);
+        tex.data[i3 + 1] = Math.min(255, tex.data[i3 + 1] * f + 44);
+        tex.data[i3 + 2] = Math.min(255, tex.data[i3 + 2] * f + 52);
+      }
+    }
+  }
+  addNoise(tex, rand, 5);
+  return tex;
+}
+
 export function buildTextures(): TextureSet {
   const walls = [
     makeTex(), // 0 unused
@@ -1470,6 +1544,8 @@ export function buildTextures(): TextureSet {
     tentMouth(), // 25 — a tent's dark opening, flaps tied back
     lanternGlow(), // 26 — iron-framed lantern, amber panes alight
     foliageWall(), // 27 — clipped leaf mass: trees, shrubs, window boxes
+    rockWall(), // 28 — uncoursed mountain granite: the high pass
+    snowCragWall(), // 29 — the same crag snow-capped: the ridge's crest cells
   ];
   // Facade ids that have a candle-lit version for night-time.
   const wallsLit = new Uint8Array(walls.length);
