@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plague Hunt</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="hud">
+      <div id="clock"></div>
+      <canvas id="compass" width="360" height="30"></canvas>
+      <div id="quest"></div>
+      <div id="dialog"></div>
+      <div id="inv"></div>
+      <div id="reticle"></div>
+      <div id="prompt"></div>
+      <div id="bars">
+        <div class="bar"><div class="track"><div id="bar-health" class="fill health"></div></div><span>health</span></div>
+        <div class="bar"><div class="track"><div id="bar-hunger" class="fill hunger"></div></div><span>hunger</span></div>
+        <div class="bar"><div class="track"><div id="bar-thirst" class="fill thirst"></div></div><span>thirst</span></div>
+        <div class="bar"><div class="track"><div id="bar-fatigue" class="fill fatigue"></div></div><span>fatigue</span></div>
+      </div>
+      <div id="damage"></div>
+    </div>
+    <div id="inventory" class="nolock"></div>
+    <div id="journal"></div>
+    <div id="shop" class="nolock"></div>
+    <div id="autopsy" class="nolock"></div>
+    <div id="citymap"></div>
+    <div id="intro"><div class="veil"></div><div class="card"></div><div class="title">PLAGUE HUNT</div><span class="skip">click — skip</span></div>
+    <div id="overlay"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
