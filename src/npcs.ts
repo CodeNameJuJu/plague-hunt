@@ -171,16 +171,20 @@ export function villagerSprites(
   variants: SpriteRuntime["frames"][],
   scale: number
 ): SpriteRuntime[] {
-  return state.list.map((v) => ({
-    kind: "villager",
-    x: v.x,
-    y: v.y,
-    frames: variants[Math.min(variants.length - 1, Math.floor(v.variant * variants.length))],
-    scale: scale * v.scale,
-    block: 0,
-    animFps: 2.2 + v.speed, // faster walkers swing their arms faster
-    crossed: true,
-  }));
+  return state.list.map((v) => {
+    const vi = Math.min(variants.length - 1, Math.floor(v.variant * variants.length));
+    return {
+      kind: "villager",
+      x: v.x,
+      y: v.y,
+      frames: variants[vi],
+      scale: scale * v.scale,
+      block: 0,
+      animFps: v.wait > 0 ? 0 : 2.2 + v.speed, // faster walkers swing faster; a dawdler stands still
+      model: `villager${vi}`,
+      angle: Math.atan2(v.ty - v.y, v.tx - v.x),
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -212,8 +216,8 @@ interface PatrolGuard {
 export interface PatrolState {
   routes: PatrolRoute[];
   guards: PatrolGuard[];
-  // Written by patrolPositions — the world positions each frame.
-  pos: { x: number; y: number }[];
+  // Written by updatePatrols — the world positions and headings each frame.
+  pos: { x: number; y: number; ang: number }[];
 }
 
 function makeRoute(pts: Spot[]): PatrolRoute {
@@ -247,7 +251,7 @@ export function makePatrols(): PatrolState {
     guards.push({ route: r, s: routes[r].len * (0.15 + r * 0.22), dir: 1, lat: -0.14 });
     guards.push({ route: r, s: routes[r].len * (0.15 + r * 0.22) - 0.9, dir: 1, lat: 0.14 });
   }
-  return { routes, guards, pos: guards.map(() => ({ x: 0, y: 0 })) };
+  return { routes, guards, pos: guards.map(() => ({ x: 0, y: 0, ang: 0 })) };
 }
 
 export function updatePatrols(state: PatrolState, dt: number): void {
@@ -269,6 +273,7 @@ export function updatePatrols(state: PatrolState, dt: number): void {
     const dy = (b.y - a.y) / segLen;
     state.pos[i].x = a.x + (b.x - a.x) * t - dy * g.lat;
     state.pos[i].y = a.y + (b.y - a.y) * t + dx * g.lat;
+    state.pos[i].ang = Math.atan2((b.y - a.y) * g.dir, (b.x - a.x) * g.dir);
   }
 }
 
@@ -285,7 +290,8 @@ export function patrolSprites(
     scale,
     block: 0,
     animFps: 2.2 + PATROL_SPEED,
-    crossed: true,
+    model: "patrol",
+    angle: p.ang,
   }));
 }
 

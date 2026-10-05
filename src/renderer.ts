@@ -39,6 +39,20 @@ const BAYER: number[] = (() => {
 // than one band so transitions stipple rather than just jitter.
 const DITHER_AMP = 1.3 / (LIGHT_BANDS - 1);
 
+// One quad of a voxel figure after the facing transform — a world-space
+// segment with a height range and a texture, drawn like a prop face.
+interface ModelFace {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  tex: number;
+  sh: number; // baked face brightness — front lit, sides dim, back darkest
+  az: number; // the face's bearing — feeds the live sunlight term
+  z0: number;
+  z1: number;
+}
+
 // Palette crunch — final colours are posterised to this many steps per
 // channel, with the Bayer matrix dithering the boundary. The 8-bit soul.
 const POSTER_STEP = 255 / 30;
@@ -154,7 +168,7 @@ export class Renderer {
     this.castFloorCeiling(map, tex, lights, flick, player, horizon, dirX, dirY, planeX, planeY);
     this.castWalls(map, tex, lights, flick, player, horizon, dirX, dirY, planeX, planeY);
     this.castProps(map, tex, lights, flick, player, horizon, dirX, dirY, planeX, planeY);
-    this.castSprites(sprites, lights, flick, player, horizon, dirX, dirY, planeX, planeY, t);
+    this.castSprites(sprites, tex, lights, flick, player, horizon, dirX, dirY, planeX, planeY, t);
 
     // Post pass: film grain + palette posterisation, one sweep.
     // Each channel snaps to POSTER_STEP levels with Bayer dither on the
@@ -856,6 +870,7 @@ export class Renderer {
   // Billboard sprites, far-to-near, clipped per column by the wall z-buffer.
   private castSprites(
     sprites: SpriteRuntime[],
+    tex: TextureSet,
     lights: LightDef[],
     flick: Float64Array,
     player: Player,
@@ -873,6 +888,8 @@ export class Renderer {
       .sort((a, b) => b.d - a.d);
 
     const invDet = 1 / (planeX * dirY - dirX * planeY);
+    // Per-column scratch for the model face pass — hits sort far to near.
+    const hits: { t: number; u: number; f: ModelFace }[] = [];
 
     for (const { s } of order) {
       if (s.taken) continue;
@@ -880,8 +897,9 @@ export class Renderer {
       const relY = s.y - player.y;
       const tx = invDet * (dirY * relX - dirX * relY);
       const ty = invDet * (-planeY * relX + planeX * relY); // depth
-      // Crossed sprites are geometry, not a point — they cull per column.
-      if (!s.crossed && ty < 0.15) continue;
+      // Model sprites are geometry, not a point — they cull per column.
+      const model = s.model ? tex.models[s.model] : undefined;
+      if (!model && ty < 0.15) continue;
 
       const frame =
         s.frames[
@@ -898,51 +916,120 @@ export class Renderer {
       const tgC = lerp(COOL.g, WARM.g, this.sample.warm);
       const tbC = lerp(COOL.b, WARM.b, this.sample.warm);
 
-      // Crossed sprites — people. Two perpendicular quads through the figure
-      // give it a silhouette from every bearing: face-on you see one plane,
-      // side-on the other, and the near plane can never cull a point because
-      // there is no point — each face is ray-tested per column like a prop.
-      if (s.crossed) {
-        const hw = (s.scale * (frame.w / frame.h)) / 2; // quad half-width
-        const quads: [number, number, number, number][] = [
-          [s.x - hw, s.y, s.x + hw, s.y],
-          [s.x, s.y - hw, s.x, s.y + hw],
-        ];
-        for (const [qx0, qy0, qx1, qy1] of quads) {
-          const sx = qx1 - qx0;
-          const sy = qy1 - qy0;
-          const ax = qx0 - player.x;
-          const ay = qy0 - player.y;
-          for (let x = 0; x < W; x++) {
-            const camX = (2 * x) / W - 1;
-            const rx = dirX + planeX * camX;
-            const ry = dirY + planeY * camX;
-            const den = sx * ry - rx * sy;
+      // Model sprites — people. A voxel figure is a handful of box parts
+      // (legs or a skirt, torso, arms, head), each face an oriented quad that
+      // ray-tests per column like a prop face. It keeps a silhouette from
+      // every bearing, shades each face like a wall, and the near plane can
+      // never cull a point because there is no point.
+      if (model) {
+        const yaw = s.angle ?? Math.atan2(player.y - s.y, player.x - s.x);
+        const fwx = Math.cos(yaw);
+        const fwy = Math.sin(yaw);
+        const rtx = -fwy;
+        const rty = fwx;
+        const sc = s.scale;
+        // Limbs swing only while the figure walks — idle figures stand still.
+        const walk = s.animFps >= 1 ? (t * s.animFps) % 1 : 0;
+        const faces: ModelFace[] = [];
+        for (const p of model) {
+          const sw = p.swing ? Math.sin(walk * Math.PI * 2 + (p.phase ?? 0)) * p.swing : 0;
+          const cx = s.x + rtx * p.ox * sc + fwx * (p.oy + sw) * sc;
+          const cy = s.y + rty * p.ox * sc + fwy * (p.oy + sw) * sc;
+          const hw = (p.w * sc) / 2;
+          const hd = (p.d * sc) / 2;
+          const z0 = p.z0 * sc;
+          const z1 = p.z1 * sc;
+          // front (+facing), right, back, left — baked face shading like
+          // props, and a bearing each so the sun catches them live.
+          faces.push({ x0: cx + fwx * hd - rtx * hw, y0: cy + fwy * hd - rty * hw, x1: cx + fwx * hd + rtx * hw, y1: cy + fwy * hd + rty * hw, tex: p.tex[0], sh: 1.0, az: yaw, z0, z1 });
+          faces.push({ x0: cx + rtx * hw + fwx * hd, y0: cy + rty * hw + fwy * hd, x1: cx + rtx * hw - fwx * hd, y1: cy + rty * hw - fwy * hd, tex: p.tex[1], sh: 0.82, az: yaw - Math.PI / 2, z0, z1 });
+          faces.push({ x0: cx - fwx * hd + rtx * hw, y0: cy - fwy * hd + rty * hw, x1: cx - fwx * hd - rtx * hw, y1: cy - fwy * hd - rty * hw, tex: p.tex[2], sh: 0.66, az: yaw + Math.PI, z0, z1 });
+          faces.push({ x0: cx - rtx * hw - fwx * hd, y0: cy - rty * hw - fwy * hd, x1: cx - rtx * hw + fwx * hd, y1: cy - rty * hw + fwy * hd, tex: p.tex[3], sh: 0.82, az: yaw + Math.PI / 2, z0, z1 });
+        }
+        // Project the face corners to screen columns — a figure only ray-tests
+        // the columns it can touch. A corner behind the camera means the whole
+        // span is in play (the figure is standing in it).
+        let colLo = 0;
+        let colHi = W - 1;
+        {
+          let lo = Infinity;
+          let hi = -Infinity;
+          let behind = false;
+          for (const f of faces) {
+            for (const [vx, vy] of [[f.x0, f.y0], [f.x1, f.y1]] as const) {
+              const rx0 = vx - player.x;
+              const ry0 = vy - player.y;
+              const txv = invDet * (dirY * rx0 - dirX * ry0);
+              const tyv = invDet * (-planeY * rx0 + planeX * ry0);
+              if (tyv < 0.15) { behind = true; break; }
+              const sxv = (W / 2) * (1 + txv / tyv);
+              if (sxv < lo) lo = sxv;
+              if (sxv > hi) hi = sxv;
+            }
+            if (behind) break;
+          }
+          if (!behind) {
+            colLo = Math.max(0, Math.floor(lo));
+            colHi = Math.min(W - 1, Math.ceil(hi));
+            if (colLo > colHi) continue; // the whole figure is off-screen
+          }
+        }
+        for (let x = colLo; x <= colHi; x++) {
+          const camX = (2 * x) / W - 1;
+          const rdx = dirX + planeX * camX;
+          const rdy = dirY + planeY * camX;
+          hits.length = 0;
+          for (const f of faces) {
+            const sx = f.x1 - f.x0;
+            const sy = f.y1 - f.y0;
+            const den = sx * rdy - rdx * sy;
             if (den > -1e-9 && den < 1e-9) continue;
+            const ax = f.x0 - player.x;
+            const ay = f.y0 - player.y;
             const ht = (-ax * sy + sx * ay) / den;
-            const hu = (rx * ay - ry * ax) / den;
-            if (ht < 0.03 || hu < 0 || hu > 1 || ht >= this.zbuf[x]) continue;
-            const perpH = H / ht;
+            const hu = (rdx * ay - rdy * ax) / den;
+            if (ht < 0.03 || hu < 0 || hu > 1) continue;
+            hits.push({ t: ht, u: hu, f });
+          }
+          if (!hits.length) continue;
+          hits.sort((a, b) => b.t - a.t);
+          const xb = x & 3;
+          for (const hit of hits) {
+            const f = hit.f;
+            const perpH = H / hit.t;
             const floorY = horizon + perpH * 0.5;
-            const yTop = Math.max(0, Math.ceil(floorY - perpH * s.scale));
-            const yBot = Math.min(H - 1, Math.floor(floorY));
+            const yTop = Math.max(0, Math.ceil(floorY - perpH * f.z1));
+            let yBot = Math.min(H - 1, Math.floor(floorY - perpH * f.z0));
+            // Behind the wall depth a face only owns the rows above the
+            // wall's top edge — a figure behind a low wall keeps its head.
+            if (hit.t >= this.zbuf[x]) yBot = Math.min(yBot, this.colTop[x] - 1);
             if (yTop > yBot) continue;
-            const texU = Math.min(frame.w - 1, Math.floor(hu * frame.w));
-            const xb = x & 3;
-            const qfog = fogFactor(ht, this.fogNear, this.fogFar);
+            const texX = Math.min(TEX_SIZE - 1, Math.floor(hit.u * TEX_SIZE));
+            const ftx = tex.walls[f.tex];
+            const span = f.z1 - f.z0;
+            const qfog = fogFactor(hit.t, this.fogNear, this.fogFar);
+            // Light at the face, not the feet — a lantern pool catches the
+            // near side of a figure the way it catches a wall.
+            const hx = player.x + hit.t * rdx;
+            const hy = player.y + hit.t * rdy;
+            lightAt(hx, hy, lights, flick, this.ambientAt(hx, hy), this.ambWarm, this.sample);
+            let fbright = Math.min(1, this.sample.bright) * f.sh;
+            fbright *= 1 + this.daylight * 0.55 * Math.cos(f.az - this.sunAz);
+            fbright = Math.min(1, Math.max(0, fbright));
+            fbright = Math.floor(fbright * bandNorm) / bandNorm;
+            const ftr = lerp(COOL.r, WARM.r, this.sample.warm);
+            const ftg = lerp(COOL.g, WARM.g, this.sample.warm);
+            const ftb = lerp(COOL.b, WARM.b, this.sample.warm);
             for (let y = yTop; y <= yBot; y++) {
-              const texV = Math.min(
-                frame.h - 1,
-                Math.floor(((y - yTop) / Math.max(1, yBot - yTop + 1)) * frame.h)
-              );
-              const ti = (texV * frame.w + texU) * 4;
-              if (frame.data[ti + 3] < 128) continue;
+              const uh = (floorY - y) / perpH;
+              const texY = Math.min(TEX_SIZE - 1, Math.max(0, Math.floor(((f.z1 - uh) / span) * TEX_SIZE)));
+              const ti = (texY * TEX_SIZE + texX) * 3;
               const dth = (BAYER[((y & 3) << 2) | xb] - 0.5) * DITHER_AMP;
-              const bp = Math.min(1, Math.max(0, bright + dth));
+              const bp = Math.min(1, Math.max(0, fbright + dth));
               const o = (y * W + x) * 4;
-              buf[o] = lerp(frame.data[ti] * trC * bp, FOG_R, qfog);
-              buf[o + 1] = lerp(frame.data[ti + 1] * tgC * bp, FOG_G, qfog);
-              buf[o + 2] = lerp(frame.data[ti + 2] * tbC * bp, FOG_B, qfog);
+              buf[o] = lerp(ftx.data[ti] * ftr * bp, FOG_R, qfog);
+              buf[o + 1] = lerp(ftx.data[ti + 1] * ftg * bp, FOG_G, qfog);
+              buf[o + 2] = lerp(ftx.data[ti + 2] * ftb * bp, FOG_B, qfog);
             }
           }
         }

@@ -125,12 +125,28 @@ export interface GameMap {
   spawnAngle: number;
 }
 
+// One solid piece of a voxel person — an axis-aligned box in the figure's
+// local frame (x right, y forward, z up), rendered as oriented quads so it
+// keeps a silhouette and a lit face from every bearing.
+export interface ModelPart {
+  ox: number; // offset right of centre, in units of the sprite's scale
+  oy: number; // offset forward along the facing
+  w: number;  // width across the facing
+  d: number;  // depth along the facing
+  z0: number; // base height, fraction of the sprite's scale
+  z1: number; // top height
+  tex: number[]; // [front, right, back, left] texture ids into walls
+  swing?: number; // walk-swing amplitude along the facing (legs, arms)
+  phase?: number; // swing phase offset — limbs counter-swing
+}
+
 // Texture lookup tables, indexed by the ids assigned in map.ts.
 export interface TextureSet {
   walls: Texture[]; // 1 stone, 2 darkBrick, 3 wood, 4 door, 5 timber, 6 barricade, 7+ facades, 19 door leaf, 20+ quarantine, 23 palisade, 24 canvas, 25 tent mouth
   wallsLit: Uint8Array; // facade id -> lit-window variant id, 0 = none
   floors: Texture[]; // 1 flagstone, 2 carpet, 3 dirt, 4 cobble, 5 wood, 6 sewer, 7 grass
   ceils: Texture[]; // 1 beams, 2 nightSky, 3 daySky
+  models: Record<string, ModelPart[]>; // voxel figures, keyed like sprite kinds
 }
 
 // Runtime sprite: a placed sprite plus its resolved frames.
@@ -145,10 +161,12 @@ export interface SpriteRuntime {
   pickup?: PickupKind;
   letter?: number;
   taken?: boolean;
-  // Crossed sprites draw as two perpendicular world-space quads instead of a
-  // camera-facing billboard — people use it so they hold a silhouette from
-  // every angle and never cull at the near plane.
-  crossed?: boolean;
+  // Model sprites render as voxel figures (tex.models) instead of billboards —
+  // people use it so they hold a silhouette from every bearing and never cull
+  // at the near plane. `model` keys the figure; `angle` is the facing (when
+  // absent the figure turns to watch the player).
+  model?: string;
+  angle?: number;
   stairLink?: { x: number; y: number };
   examine?: string;
   clue?: string;

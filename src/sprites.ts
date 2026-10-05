@@ -1,5 +1,5 @@
 import { TEX_SIZE } from "./config";
-import type { SpriteTex } from "./types";
+import type { SpriteTex, Texture, TextureSet, ModelPart } from "./types";
 
 // Sprite bitmaps, generated procedurally like the textures. Every sprite is a
 // SPRITE_PX x SPRITE_PX RGBA bitmap; alpha < 128 is transparent.
@@ -1628,7 +1628,7 @@ export interface SpriteKind {
   scale: number; // fraction of a tile the sprite occupies vertically
   block: number; // collision radius in tiles, 0 = walk through
   animFps: number; // 0 = static
-  crossed?: boolean; // draw as perpendicular quads, not a flat billboard
+  model?: string; // render as a voxel figure from tex.models, not a billboard
 }
 
 export function buildSpriteKinds(): Record<string, SpriteKind> {
@@ -1699,13 +1699,14 @@ export function buildSpriteKinds(): Record<string, SpriteKind> {
     sign_church: { frames: [signFrame("cross")], scale: 0.55, block: 0, animFps: 0 },
     sign_alchemist: { frames: [signFrame("flask")], scale: 0.55, block: 0, animFps: 0 },
   };
-  // People stand on crossed quads — a silhouette from every bearing, and no
-  // near-plane pop when one walks past your shoulder.
+  // People render as voxel figures — a silhouette from every bearing, and no
+  // near-plane pop when one walks past your shoulder. The model key is the
+  // kind name; villagers get theirs per-variant at spawn.
   for (const k of [
-    "villager", "patrol", "guard", "shambler", "hooded",
+    "patrol", "guard", "shambler", "hooded",
     "nun", "aubert", "digger", "widow", "innkeep", "baker", "alchemist", "patient",
     "herbwife", "clothier", "monger", "anette",
-  ]) kinds[k].crossed = true;
+  ]) kinds[k].model = k;
   return kinds;
 }
 
@@ -1786,4 +1787,290 @@ export function texCanvas(tex: SpriteTex): HTMLCanvasElement {
   c.height = Math.max(1, maxY - minY + 1);
   if (maxX >= 0) c.getContext("2d")!.drawImage(src, minX, minY, c.width, c.height, 0, 0, c.width, c.height);
   return c;
+}
+
+// ---------------------------------------------------------------------------
+// Voxel people — every person also exists as a box-built figure: legs or a
+// skirt, a torso, swinging arms and a head, each face drawn flat from the
+// same palettes as the billboard art. Rendered as oriented quads they keep a
+// silhouette from every bearing, shade per-face like walls, and never cull
+// at the near plane. `dress` wears a skirt box; `noArms` hides the arm boxes
+// (folded, hugging, a cloak with nothing inside).
+
+type RGB = [number, number, number];
+type Headwear =
+  | "hair" | "kerchief" | "cap" | "straw" | "hood" | "deephood"
+  | "wimple" | "veil" | "helm" | "bandage" | "wild" | "bun";
+
+interface ModelPal {
+  robe: RGB; skin: RGB; hose: RGB; shoe: RGB;
+  belt?: RGB; apron?: RGB; front?: RGB; shawl?: RGB;
+  head?: Headwear; headCol?: RGB; hair?: RGB; beard?: RGB; eyeCol?: RGB;
+  marks?: boolean; ruddy?: boolean; voidFace?: boolean; bareArms?: boolean;
+  dress?: boolean; noArms?: boolean; hunch?: boolean;
+}
+
+function mt(): Texture {
+  return { w: TEX_SIZE, h: TEX_SIZE, data: new Uint8Array(TEX_SIZE * TEX_SIZE * 3) };
+}
+function mpx(t: Texture, x: number, y: number, c: RGB): void {
+  x = Math.floor(x); y = Math.floor(y);
+  if (x < 0 || y < 0 || x >= t.w || y >= t.h) return;
+  const i = (y * t.w + x) * 3;
+  t.data[i] = c[0]; t.data[i + 1] = c[1]; t.data[i + 2] = c[2];
+}
+function mrect(t: Texture, x0: number, y0: number, x1: number, y1: number, c: RGB): void {
+  for (let y = Math.floor(y0); y <= Math.floor(y1); y++)
+    for (let x = Math.floor(x0); x <= Math.floor(x1); x++) mpx(t, x, y, c);
+}
+function sh(c: RGB, f: number): RGB {
+  return [c[0] * f, c[1] * f, c[2] * f];
+}
+// Base fill — the colour with slight grain and a darker rim on the box's side
+// edges, so flat faces still read as having a little body to them.
+function mfill(t: Texture, c: RGB, seed: number, rim = true): void {
+  const r = rng(seed);
+  for (let y = 0; y < t.h; y++) {
+    for (let x = 0; x < t.w; x++) {
+      const edge = rim ? Math.min(x, t.w - 1 - x) : 4;
+      mpx(t, x, y, sh(c, (0.9 + r() * 0.16) * (edge < 2 ? 0.78 : 1)));
+    }
+  }
+}
+
+function legTex(pal: ModelPal, face: number): Texture {
+  const t = mt();
+  if (pal.dress === false) {
+    mfill(t, pal.hose, 711 + face);
+    mrect(t, 29, 6, 34, 50, sh(pal.hose, 0.55)); // the cleft between the legs
+    mrect(t, 0, 52, TEX_SIZE - 1, TEX_SIZE - 1, sh(pal.shoe, 0.85));
+    mrect(t, 0, 52, TEX_SIZE - 1, 54, sh(pal.shoe, 0.6)); // shoe top shadow
+  } else {
+    mfill(t, pal.robe, 719 + face);
+    // hem — a darker band, then the ground shadow
+    mrect(t, 0, 54, TEX_SIZE - 1, TEX_SIZE - 1, sh(pal.robe, 0.6));
+    if (pal.marks) {
+      mpx(t, 14, 40, sh(pal.robe, 0.5));
+      mpx(t, 46, 34, sh(pal.robe, 0.55));
+      mpx(t, 30, 46, sh(pal.robe, 0.5));
+    }
+  }
+  return t;
+}
+
+function torsoTex(pal: ModelPal, face: number): Texture {
+  const t = mt();
+  mfill(t, pal.robe, 823 + face);
+  const mid = TEX_SIZE >> 1;
+  if (face === 0) {
+    // front — collar notch, belt, apron or a hanging front panel
+    mrect(t, mid - 4, 0, mid + 4, 3, sh(pal.robe, 0.55));
+    if (pal.belt) mrect(t, 0, 34, TEX_SIZE - 1, 38, pal.belt);
+    const panel = pal.apron ?? pal.front;
+    if (panel) {
+      for (let y = 10; y < 60; y++) {
+        const w = 10 + (y - 10) * 0.22;
+        mrect(t, mid - w, y, mid + w, y, panel);
+      }
+      mrect(t, mid - 8, 10, mid + 8, 14, sh(panel, 0.8));
+    }
+    if (pal.marks) {
+      mpx(t, 22, 44, [72, 62, 54]); mpx(t, 40, 36, [72, 62, 54]);
+      mpx(t, 31, 50, [66, 56, 48]); mpx(t, 26, 22, [66, 56, 48]);
+    }
+  } else if (face === 2) {
+    if (pal.belt) mrect(t, 0, 34, TEX_SIZE - 1, 38, pal.belt);
+    if (pal.shawl) mrect(t, 0, 0, TEX_SIZE - 1, 12, pal.shawl);
+    else mrect(t, 0, 0, TEX_SIZE - 1, 4, sh(pal.robe, 0.8)); // shoulder shadow
+  } else {
+    if (pal.belt) mrect(t, 0, 34, TEX_SIZE - 1, 38, pal.belt);
+    if (pal.shawl) mrect(t, 0, 0, TEX_SIZE - 1, 10, pal.shawl);
+  }
+  return t;
+}
+
+function armTex(pal: ModelPal): Texture {
+  const t = mt();
+  const sleeve = pal.bareArms ? pal.skin : pal.robe;
+  mfill(t, sleeve, 937);
+  if (pal.bareArms) mrect(t, 0, 0, TEX_SIZE - 1, 14, pal.robe); // rolled sleeve
+  mrect(t, 0, 50, TEX_SIZE - 1, TEX_SIZE - 1, pal.skin); // the hand
+  mrect(t, 0, 48, TEX_SIZE - 1, 50, sh(pal.skin, 0.7));
+  return t;
+}
+
+// Headwear drawn over a head face. `face`: 0 front, 1/3 sides, 2 back.
+function headwear(t: Texture, pal: ModelPal, face: number): void {
+  const mid = TEX_SIZE >> 1;
+  const col = pal.headCol ?? pal.robe;
+  switch (pal.head ?? "hair") {
+    case "hair":
+      mrect(t, 0, 0, TEX_SIZE - 1, 20, pal.hair ?? [70, 56, 40]);
+      if (face === 2) mrect(t, 0, 0, TEX_SIZE - 1, 34, pal.hair ?? [70, 56, 40]);
+      break;
+    case "kerchief":
+      mrect(t, 0, 0, TEX_SIZE - 1, 24, col);
+      if (face !== 0) {
+        mrect(t, 0, 0, TEX_SIZE - 1, 34, col);
+        mrect(t, face === 2 ? mid - 6 : 4, 30, face === 2 ? mid + 6 : 10, 42, col); // the knot
+      }
+      break;
+    case "cap":
+      mrect(t, 0, 0, TEX_SIZE - 1, 20, col);
+      mrect(t, 0, 20, TEX_SIZE - 1, 26, sh(col, 0.6)); // brim
+      break;
+    case "straw":
+      mrect(t, 0, 0, TEX_SIZE - 1, 16, col);
+      mrect(t, 0, 16, TEX_SIZE - 1, 24, sh(col, 0.75));
+      break;
+    case "helm":
+      mrect(t, 0, 0, TEX_SIZE - 1, 26, col);
+      mrect(t, 0, 26, TEX_SIZE - 1, 30, sh(col, 0.55)); // brow band
+      if (face === 0) mrect(t, mid - 2, 30, mid + 2, 44, sh(col, 0.8)); // nasal
+      break;
+    case "hood":
+    case "deephood":
+      if (face === 0) {
+        // hood frame around the face — sides, crown, and a shadow inside
+        mrect(t, 0, 0, TEX_SIZE - 1, 16, col);
+        mrect(t, 0, 0, 12, TEX_SIZE - 1, col);
+        mrect(t, TEX_SIZE - 13, 0, TEX_SIZE - 1, TEX_SIZE - 1, col);
+        if (pal.head === "deephood")
+          mrect(t, 13, 16, TEX_SIZE - 14, 40, pal.voidFace ? [8, 7, 10] : sh(pal.skin, 0.45));
+      } else {
+        mfill(t, col, 601 + face);
+        mrect(t, 0, 30, TEX_SIZE - 1, 34, sh(col, 0.7)); // cowl fold
+      }
+      break;
+    case "wimple":
+      if (face === 0) {
+        mrect(t, 0, 0, TEX_SIZE - 1, 12, col);
+        mrect(t, 0, 0, 12, TEX_SIZE - 1, col);
+        mrect(t, TEX_SIZE - 13, 0, TEX_SIZE - 1, TEX_SIZE - 1, col);
+        mrect(t, 0, TEX_SIZE - 10, TEX_SIZE - 1, TEX_SIZE - 1, col); // under the chin
+      } else {
+        mfill(t, col, 613 + face);
+        if (face === 2) mrect(t, 0, 0, TEX_SIZE - 1, 20, sh(pal.robe, 1.4)); // dark veil crown
+      }
+      break;
+    case "veil":
+      mfill(t, col, 631 + face); // sheer black over everything
+      if (face === 2) mrect(t, mid - 6, 8, mid + 6, 18, [104, 98, 94]); // pinned bun
+      break;
+    case "bandage":
+      mrect(t, 0, 0, TEX_SIZE - 1, 14, pal.hair ?? [120, 112, 104]);
+      mrect(t, 0, 14, TEX_SIZE - 1, 24, col); // the wrap
+      mpx(t, face === 2 ? mid : 6, 19, sh(col, 0.75)); // knot
+      break;
+    case "wild":
+      mfill(t, col, 647 + face);
+      if (face === 0) mrect(t, 14, 26, TEX_SIZE - 15, TEX_SIZE - 1, pal.skin); // face below the fringe
+      break;
+    case "bun":
+      mrect(t, 0, 0, TEX_SIZE - 1, 20, col);
+      if (face === 2) mrect(t, mid - 7, 14, mid + 7, 28, sh(col, 0.85)); // the bun
+      break;
+  }
+}
+
+function headTex(pal: ModelPal, face: number): Texture {
+  const t = mt();
+  const skin = pal.voidFace ? ([10, 9, 12] as RGB) : pal.skin;
+  mfill(t, skin, 557 + face);
+  const mid = TEX_SIZE >> 1;
+  if (face === 0 && !pal.voidFace && pal.head !== "veil") {
+    // brow shadow, eyes, nose, mouth
+    mrect(t, 16, 26, TEX_SIZE - 17, 28, sh(skin, 0.75));
+    const eye = pal.eyeCol ?? [22, 18, 14];
+    mrect(t, 20, 29, 24, 33, eye);
+    mrect(t, 39, 29, 43, 33, eye);
+    mrect(t, mid - 1, 33, mid + 1, 38, sh(skin, 0.8)); // nose
+    mrect(t, mid - 4, 42, mid + 4, 44, sh(skin, 0.55)); // mouth
+    if (pal.ruddy) {
+      mrect(t, 18, 36, 24, 40, [150, 92, 70]);
+      mrect(t, 40, 36, 46, 40, [150, 92, 70]);
+    }
+    if (pal.beard) mrect(t, 16, 40, TEX_SIZE - 17, TEX_SIZE - 1, pal.beard);
+    if (pal.marks) {
+      mpx(t, 20, 46, [84, 70, 60]); mpx(t, 44, 40, [84, 70, 60]);
+    }
+  }
+  if (face === 2 && pal.beard) mrect(t, 0, 40, TEX_SIZE - 1, TEX_SIZE - 1, sh(pal.beard, 0.9));
+  headwear(t, pal, face);
+  return t;
+}
+
+function pushTex(tex: TextureSet, t: Texture): number {
+  tex.walls.push(t);
+  return tex.walls.length - 1;
+}
+
+// Build the box figure for a palette — five to eight solid parts, each face
+// carrying its own texture. Heights are fractions of the sprite's scale.
+function buildPerson(tex: TextureSet, pal: ModelPal): ModelPart[] {
+  const legF = pushTex(tex, legTex(pal, 0)), legS = pushTex(tex, legTex(pal, 1)), legB = pushTex(tex, legTex(pal, 2));
+  const torF = pushTex(tex, torsoTex(pal, 0)), torS = pushTex(tex, torsoTex(pal, 1)), torB = pushTex(tex, torsoTex(pal, 2));
+  const arm = pushTex(tex, armTex(pal));
+  const headF = pushTex(tex, headTex(pal, 0)), headS = pushTex(tex, headTex(pal, 1)), headB = pushTex(tex, headTex(pal, 2));
+  const parts: ModelPart[] = [];
+  if (pal.dress === false) {
+    parts.push({ ox: -0.09, oy: 0, w: 0.15, d: 0.16, z0: 0, z1: 0.5, tex: [legF, legS, legB, legS], swing: 0.1, phase: 0 });
+    parts.push({ ox: 0.09, oy: 0, w: 0.15, d: 0.16, z0: 0, z1: 0.5, tex: [legF, legS, legB, legS], swing: 0.1, phase: Math.PI });
+  } else {
+    parts.push({ ox: 0, oy: 0, w: 0.34, d: 0.26, z0: 0, z1: 0.52, tex: [legF, legS, legB, legS] });
+  }
+  parts.push({ ox: 0, oy: 0, w: 0.38, d: 0.26, z0: 0.5, z1: 0.88, tex: [torF, torS, torB, torS] });
+  if (!pal.noArms) {
+    parts.push({ ox: -0.27, oy: 0, w: 0.1, d: 0.13, z0: 0.56, z1: 0.82, tex: [arm, arm, arm, arm], swing: 0.09, phase: Math.PI });
+    parts.push({ ox: 0.27, oy: 0, w: 0.1, d: 0.13, z0: 0.56, z1: 0.82, tex: [arm, arm, arm, arm], swing: 0.09, phase: 0 });
+  }
+  parts.push({ ox: 0, oy: pal.hunch ? 0.06 : 0, w: 0.25, d: 0.24, z0: 0.88, z1: 1.14, tex: [headF, headS, headB, headS] });
+  return parts;
+}
+
+// Headwear for the eight villager dressings — the crowd reads as strangers.
+const VARIANT_MODEL: { head: Headwear; headCol?: RGB; dress?: boolean; bareArms?: boolean; noArms?: boolean }[] = [
+  { head: "hood" },                                        // the pilgrim
+  { head: "kerchief", headCol: [210, 204, 190] },          // the housewife
+  { head: "cap", headCol: [52, 40, 30], dress: false },    // the tradesman
+  { head: "kerchief", headCol: [64, 60, 54] },             // the beggar's shawl
+  { head: "cap", headCol: [40, 44, 64] },                  // the clerk
+  { head: "straw", headCol: [150, 124, 70], dress: false, bareArms: true }, // fieldhand
+  { head: "deephood", headCol: [38, 36, 42], noArms: true }, // the mourner
+  { head: "hair", headCol: undefined },                    // the carter — hood down
+];
+
+const NAMED_MODELS: Record<string, ModelPal> = {
+  patrol: { robe: [62, 76, 96], skin: [168, 130, 96], hose: [40, 44, 50], shoe: [30, 26, 22], belt: [46, 36, 24], head: "helm", headCol: [118, 122, 128], dress: false },
+  guard: { robe: [58, 66, 82], skin: [166, 128, 94], hose: [38, 42, 48], shoe: [28, 24, 20], belt: [44, 34, 22], head: "helm", headCol: [110, 114, 120], dress: false },
+  nun: { robe: [44, 42, 54], skin: [170, 132, 98], hose: [40, 38, 46], shoe: [26, 24, 30], head: "wimple", headCol: [212, 206, 190], front: [36, 34, 44], noArms: true },
+  aubert: { robe: [78, 66, 40], skin: [170, 132, 96], hose: [46, 40, 30], shoe: [28, 24, 20], belt: [52, 38, 24], head: "cap", headCol: [58, 48, 34], beard: [138, 118, 92] },
+  digger: { robe: [62, 52, 38], skin: [176, 136, 98], hose: [44, 38, 30], shoe: [28, 24, 18], belt: [44, 34, 22], head: "cap", headCol: [40, 34, 26], beard: [120, 100, 76], apron: [50, 41, 31] },
+  widow: { robe: [56, 44, 50], skin: [162, 126, 96], hose: [38, 34, 36], shoe: [26, 24, 24], belt: [40, 34, 38], head: "veil", headCol: [30, 26, 34], shawl: [38, 32, 40] },
+  innkeep: { robe: [96, 52, 40], skin: [172, 134, 98], hose: [52, 44, 36], shoe: [32, 26, 20], belt: [60, 40, 28], head: "kerchief", headCol: [210, 204, 190], apron: [190, 180, 160] },
+  baker: { robe: [92, 78, 60], skin: [178, 140, 104], hose: [50, 44, 34], shoe: [30, 26, 22], belt: [64, 48, 32], head: "cap", headCol: [216, 210, 196], apron: [202, 196, 180], ruddy: true },
+  alchemist: { robe: [36, 38, 52], skin: [158, 128, 98], hose: [30, 28, 34], shoe: [22, 20, 26], belt: [44, 36, 28], head: "wild", headCol: [150, 148, 144], eyeCol: [120, 200, 130], hunch: true },
+  patient: { robe: [116, 110, 100], skin: [186, 172, 152], hose: [100, 96, 88], shoe: [168, 156, 138], head: "bandage", headCol: [196, 190, 172], marks: true, hunch: true, noArms: true },
+  hooded: { robe: [58, 56, 64], skin: [24, 22, 28], hose: [40, 38, 44], shoe: [30, 28, 34], head: "deephood", headCol: [66, 64, 74], voidFace: true, noArms: true },
+  herbwife: { robe: [58, 70, 46], skin: [172, 136, 98], hose: [44, 40, 34], shoe: [30, 26, 20], belt: [50, 40, 26], head: "kerchief", headCol: [84, 94, 70], apron: [62, 58, 40] },
+  clothier: { robe: [88, 44, 42], skin: [174, 134, 98], hose: [44, 38, 34], shoe: [30, 26, 22], belt: [56, 40, 26], head: "cap", headCol: [52, 40, 34] },
+  monger: { robe: [78, 60, 40], skin: [176, 138, 100], hose: [46, 40, 32], shoe: [32, 26, 20], head: "cap", headCol: [52, 40, 30], apron: [74, 52, 34], noArms: true },
+  anette: { robe: [72, 60, 64], skin: [168, 130, 96], hose: [46, 42, 40], shoe: [30, 26, 22], head: "bun", headCol: [158, 152, 144], shawl: [58, 50, 56], noArms: true },
+  shambler: { robe: [34, 38, 36], skin: [96, 108, 88], hose: [40, 46, 42], shoe: [96, 108, 88], head: "hood", headCol: [27, 31, 29], marks: true, dress: false, hunch: true },
+};
+
+// Registered after buildTextures — the models append their face textures to
+// the wall table and record the indices in their parts.
+export function buildSpriteModels(tex: TextureSet): void {
+  for (let v = 0; v < VARIANT_MODEL.length; v++) {
+    const d = DRESSES[v], m = VARIANT_MODEL[v];
+    tex.models[`villager${v}`] = buildPerson(tex, {
+      robe: d.robe, skin: d.skin, hose: d.hose, shoe: d.shoe,
+      belt: d.belt, head: m.head, headCol: m.headCol, hair: [70, 56, 40],
+      dress: m.dress, bareArms: m.bareArms, noArms: m.noArms,
+    });
+  }
+  for (const [name, pal] of Object.entries(NAMED_MODELS)) {
+    tex.models[name] = buildPerson(tex, pal);
+  }
 }

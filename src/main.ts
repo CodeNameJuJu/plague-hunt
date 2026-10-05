@@ -48,7 +48,7 @@ import {
 } from "./quests";
 import { grantClue } from "./clues";
 import { Renderer } from "./renderer";
-import { buildLantern, buildSpriteKinds, texCanvas, villagerVariants } from "./sprites";
+import { buildLantern, buildSpriteKinds, buildSpriteModels, texCanvas, villagerVariants } from "./sprites";
 import { initMenu } from "./menu";
 import {
   attractShamblerSprites,
@@ -67,6 +67,7 @@ import type { SpriteRuntime } from "./types";
 const map = buildMap();
 const introMaps = buildIntroMaps(); // the road scenes — intro shots only
 const textures = buildTextures();
+buildSpriteModels(textures); // people as voxel figures — faces join the wall table
 const spriteKinds = buildSpriteKinds();
 const villagerFrames = villagerVariants();
 const sprites: SpriteRuntime[] = map.sprites.map((s) => {
@@ -130,7 +131,7 @@ const introSceneSprites: Record<string, SpriteRuntime[]> = {};
     scale: vScale,
     block: 0,
     animFps: 0,
-    crossed: true,
+    model: `villager${v % 8}`,
   });
   introSceneSprites.farmland = [
     folk(5, 0, 7.8, 8.3),   // a fieldhand in the field gate, hoeing by the road
@@ -631,7 +632,7 @@ function frame(now: number): void {
         scale: spriteKinds.shambler.scale,
         block: 0,
         animFps: 2.4,
-        crossed: true,
+        model: "shambler",
       });
     }
   }
