@@ -2,10 +2,17 @@ import { TEX_SIZE } from "./config";
 import type { SpriteTex } from "./types";
 
 // Sprite bitmaps, generated procedurally like the textures. Every sprite is a
-// TEX_SIZE x TEX_SIZE RGBA bitmap; alpha < 128 is transparent.
+// SPRITE_PX x SPRITE_PX RGBA bitmap; alpha < 128 is transparent.
+//
+// Sprite art is authored in logical 64-space — the drawing primitives scale
+// coordinates by s.w / TEX_SIZE, so old sprites render unchanged as solid
+// blocks while new work can place fractional coordinates for finer detail.
 
-function makeSprite(): SpriteTex {
-  return { w: TEX_SIZE, h: TEX_SIZE, data: new Uint8Array(TEX_SIZE * TEX_SIZE * 4) };
+const SPRITE_RES = 2;                          // bitmap resolution vs TEX_SIZE
+const SPRITE_PX = TEX_SIZE * SPRITE_RES;       // 128 — the sprite bitmap size
+
+function makeSprite(px = SPRITE_PX): SpriteTex {
+  return { w: px, h: px, data: new Uint8Array(px * px * 4) };
 }
 
 function rng(seed: number): () => number {
@@ -18,9 +25,9 @@ function rng(seed: number): () => number {
   };
 }
 
-function px(s: SpriteTex, x: number, y: number, r: number, g: number, b: number, a = 255): void {
-  x = Math.round(x);
-  y = Math.round(y);
+// Raw pixel write — for code that already works in bitmap space (the
+// rasterizer's poly scanlines). Everything else draws in logical 64-space.
+function rawPx(s: SpriteTex, x: number, y: number, r: number, g: number, b: number, a = 255): void {
   if (x < 0 || y < 0 || x >= s.w || y >= s.h) return;
   const i = (y * s.w + x) * 4;
   s.data[i] = r;
@@ -29,21 +36,35 @@ function px(s: SpriteTex, x: number, y: number, r: number, g: number, b: number,
   s.data[i + 3] = a;
 }
 
+function px(s: SpriteTex, x: number, y: number, r: number, g: number, b: number, a = 255): void {
+  const k = s.w / TEX_SIZE;
+  const x0 = Math.round(x * k);
+  const y0 = Math.round(y * k);
+  for (let dy = 0; dy < k; dy++)
+    for (let dx = 0; dx < k; dx++) rawPx(s, x0 + dx, y0 + dy, r, g, b, a);
+}
+
 function rect(s: SpriteTex, x0: number, y0: number, x1: number, y1: number, r: number, g: number, b: number, a = 255): void {
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) px(s, x, y, r, g, b, a);
+  const k = s.w / TEX_SIZE;
+  for (let y = Math.round(y0 * k); y <= Math.round(y1 * k + k - 1); y++)
+    for (let x = Math.round(x0 * k); x <= Math.round(x1 * k + k - 1); x++) rawPx(s, x, y, r, g, b, a);
 }
 
 function ellipse(s: SpriteTex, cx: number, cy: number, rx: number, ry: number, r: number, g: number, b: number, a = 255): void {
+  const k = s.w / TEX_SIZE;
+  cx *= k; cy *= k; rx *= k; ry *= k;
   for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
     for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
       const dx = (x - cx) / rx;
       const dy = (y - cy) / ry;
-      if (dx * dx + dy * dy <= 1) px(s, x, y, r, g, b, a);
+      if (dx * dx + dy * dy <= 1) rawPx(s, x, y, r, g, b, a);
     }
   }
 }
 
 function line(s: SpriteTex, x0: number, y0: number, x1: number, y1: number, width: number, r: number, g: number, b: number, a = 255): void {
+  const k = s.w / TEX_SIZE;
+  x0 *= k; y0 *= k; x1 *= k; y1 *= k; width *= k;
   const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -52,7 +73,7 @@ function line(s: SpriteTex, x0: number, y0: number, x1: number, y1: number, widt
     const half = width / 2;
     for (let wy = -Math.ceil(half); wy <= Math.ceil(half); wy++) {
       for (let wx = -Math.ceil(half); wx <= Math.ceil(half); wx++) {
-        if (wx * wx + wy * wy <= half * half) px(s, Math.round(x + wx), Math.round(y + wy), r, g, b, a);
+        if (wx * wx + wy * wy <= half * half) rawPx(s, Math.round(x + wx), Math.round(y + wy), r, g, b, a);
       }
     }
   }
@@ -63,12 +84,16 @@ function line(s: SpriteTex, x0: number, y0: number, x1: number, y1: number, widt
 // there reads as a black line hovering over every head.
 function edge(s: SpriteTex): void {
   const { w, h, data } = s;
+  const k = s.w / TEX_SIZE; // rim band scales with the bitmap
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
       if (data[i + 3] < 128) continue;
-      const rimTop = y === 0 || data[i - w * 4 + 3] < 128;
+      const rimTop = y < k || data[i - w * 4 * k + 3] < 128 || data[i - w * 4 + 3] < 128;
       const rimSide =
+        x < k || data[i - 4 * k + 3] < 128 ||
+        x >= w - k || data[i + 4 * k + 3] < 128 ||
+        y >= h - k || data[i + w * 4 * k + 3] < 128 ||
         x === 0 || data[i - 4 + 3] < 128 ||
         x === w - 1 || data[i + 4 + 3] < 128 ||
         y === h - 1 || data[i + w * 4 + 3] < 128;
@@ -108,30 +133,28 @@ function finish(s: SpriteTex): SpriteTex {
 }
 
 // ---------------------------------------------------------------------------
-// The rasterizer — art drawn at 4× in logical 64-space, then box-downsampled.
-// Smooth shapes land as anti-aliased pixel art; limbs can be posed at any
-// angle per frame, which is what makes real walk cycles possible. Pure JS —
-// no canvas, deterministic.
+// The rasterizer — art drawn in logical 64-space onto a SPRITE_PX*RAS buffer,
+// then box-downsampled. Smooth shapes land as anti-aliased pixel art; limbs can
+// be posed at any angle per frame, which is what makes real walk cycles
+// possible. Pure JS — no canvas, deterministic.
+// The shared primitives scale by buffer size, so Ras just passes its logical
+// coordinates straight through.
 
 const RAS = 4;
 
 class Ras {
-  readonly tex: SpriteTex = {
-    w: TEX_SIZE * RAS,
-    h: TEX_SIZE * RAS,
-    data: new Uint8Array(TEX_SIZE * RAS * TEX_SIZE * RAS * 4),
-  };
+  readonly tex: SpriteTex = makeSprite(SPRITE_PX * RAS);
   px(x: number, y: number, r: number, g: number, b: number, a = 255): void {
-    rect(this.tex, x * RAS, y * RAS, x * RAS + RAS - 1, y * RAS + RAS - 1, r, g, b, a);
+    px(this.tex, x, y, r, g, b, a);
   }
   rect(x0: number, y0: number, x1: number, y1: number, r: number, g: number, b: number, a = 255): void {
-    rect(this.tex, x0 * RAS, y0 * RAS, x1 * RAS + RAS - 1, y1 * RAS + RAS - 1, r, g, b, a);
+    rect(this.tex, x0, y0, x1, y1, r, g, b, a);
   }
   ellipse(cx: number, cy: number, rx: number, ry: number, r: number, g: number, b: number, a = 255): void {
-    ellipse(this.tex, cx * RAS, cy * RAS, rx * RAS, ry * RAS, r, g, b, a);
+    ellipse(this.tex, cx, cy, rx, ry, r, g, b, a);
   }
   line(x0: number, y0: number, x1: number, y1: number, width: number, r: number, g: number, b: number, a = 255): void {
-    line(this.tex, x0 * RAS, y0 * RAS, x1 * RAS, y1 * RAS, width * RAS, r, g, b, a);
+    line(this.tex, x0, y0, x1, y1, width, r, g, b, a);
   }
   // A capsule — a limb segment, rounded at both ends.
   limb(x0: number, y0: number, x1: number, y1: number, width: number, r: number, g: number, b: number): void {
@@ -139,7 +162,8 @@ class Ras {
   }
   poly(pts: [number, number][], r: number, g: number, b: number, a = 255): void {
     const s = this.tex;
-    const P = pts.map(([x, y]) => [x * RAS, y * RAS]);
+    const K = s.w / TEX_SIZE; // scanlines run in real pixels
+    const P = pts.map(([x, y]) => [x * K, y * K]);
     const yMin = Math.floor(Math.min(...P.map((p) => p[1])));
     const yMax = Math.ceil(Math.max(...P.map((p) => p[1])));
     for (let y = yMin; y <= yMax; y++) {
@@ -153,7 +177,7 @@ class Ras {
       }
       xs.sort((m, n) => m - n);
       for (let i = 0; i + 1 < xs.length; i += 2) {
-        for (let x = Math.ceil(xs[i]); x <= Math.floor(xs[i + 1]); x++) px(s, x, y, r, g, b, a);
+        for (let x = Math.ceil(xs[i]); x <= Math.floor(xs[i + 1]); x++) rawPx(s, x, y, r, g, b, a);
       }
     }
   }
@@ -163,12 +187,13 @@ class Ras {
   down(): SpriteTex {
     const s = this.tex;
     const out = makeSprite();
-    for (let y = 0; y < TEX_SIZE; y++) {
-      for (let x = 0; x < TEX_SIZE; x++) {
+    const k = s.w / out.w; // RAS — buffer pixels per output pixel
+    for (let y = 0; y < out.h; y++) {
+      for (let x = 0; x < out.w; x++) {
         let rs = 0, gs = 0, bs = 0, as = 0, cov = 0;
-        for (let dy = 0; dy < RAS; dy++) {
-          for (let dx = 0; dx < RAS; dx++) {
-            const i = ((y * RAS + dy) * s.w + x * RAS + dx) * 4;
+        for (let dy = 0; dy < k; dy++) {
+          for (let dx = 0; dx < k; dx++) {
+            const i = ((y * k + dy) * s.w + x * k + dx) * 4;
             const w8 = s.data[i + 3] / 255;
             cov += w8;
             as += s.data[i + 3];
@@ -177,13 +202,13 @@ class Ras {
             bs += s.data[i + 2] * w8;
           }
         }
-        const o = (y * TEX_SIZE + x) * 4;
+        const o = (y * out.w + x) * 4;
         if (cov > 0) {
           out.data[o] = rs / cov;
           out.data[o + 1] = gs / cov;
           out.data[o + 2] = bs / cov;
         }
-        out.data[o + 3] = as / (RAS * RAS);
+        out.data[o + 3] = as / (k * k);
       }
     }
     return out;
