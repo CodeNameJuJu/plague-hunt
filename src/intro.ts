@@ -220,6 +220,7 @@ export function introShamblerSprites(frames: SpriteRuntime["frames"], scale: num
     scale,
     block: 0,
     animFps: 2.4,
+    crossed: true,
   }));
 }
 
@@ -280,5 +281,6 @@ export function attractShamblerSprites(frames: SpriteRuntime["frames"], scale: n
     scale,
     block: 0,
     animFps: 2.4,
+    crossed: true,
   }));
 }

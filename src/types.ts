@@ -145,6 +145,10 @@ export interface SpriteRuntime {
   pickup?: PickupKind;
   letter?: number;
   taken?: boolean;
+  // Crossed sprites draw as two perpendicular world-space quads instead of a
+  // camera-facing billboard — people use it so they hold a silhouette from
+  // every angle and never cull at the near plane.
+  crossed?: boolean;
   stairLink?: { x: number; y: number };
   examine?: string;
   clue?: string;

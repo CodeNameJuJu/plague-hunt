@@ -179,6 +179,7 @@ export function villagerSprites(
     scale: scale * v.scale,
     block: 0,
     animFps: 2.2 + v.speed, // faster walkers swing their arms faster
+    crossed: true,
   }));
 }
 
@@ -284,6 +285,7 @@ export function patrolSprites(
     scale,
     block: 0,
     animFps: 2.2 + PATROL_SPEED,
+    crossed: true,
   }));
 }
 

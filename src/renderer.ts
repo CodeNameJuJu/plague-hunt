@@ -880,7 +880,8 @@ export class Renderer {
       const relY = s.y - player.y;
       const tx = invDet * (dirY * relX - dirX * relY);
       const ty = invDet * (-planeY * relX + planeX * relY); // depth
-      if (ty < 0.15) continue;
+      // Crossed sprites are geometry, not a point — they cull per column.
+      if (!s.crossed && ty < 0.15) continue;
 
       const frame =
         s.frames[
@@ -888,13 +889,6 @@ export class Renderer {
             ? ((Math.floor(t * s.animFps) % s.frames.length) + s.frames.length) % s.frames.length
             : 0
         ];
-      const screenX = (W / 2) * (1 + tx / ty);
-      const sprH = (H / ty) * s.scale;
-      const sprW = sprH * (frame.w / frame.h);
-      // Anchor the sprite's feet on the floor at its depth.
-      const groundY = horizon + (0.5 * H) / ty;
-      const y0 = groundY - sprH;
-      const x0 = screenX - sprW / 2;
 
       lightAt(s.x, s.y, lights, flick, this.ambientAt(s.x, s.y), this.ambWarm, this.sample);
       let bright = Math.min(1, this.sample.bright);
@@ -903,6 +897,65 @@ export class Renderer {
       const trC = lerp(COOL.r, WARM.r, this.sample.warm);
       const tgC = lerp(COOL.g, WARM.g, this.sample.warm);
       const tbC = lerp(COOL.b, WARM.b, this.sample.warm);
+
+      // Crossed sprites — people. Two perpendicular quads through the figure
+      // give it a silhouette from every bearing: face-on you see one plane,
+      // side-on the other, and the near plane can never cull a point because
+      // there is no point — each face is ray-tested per column like a prop.
+      if (s.crossed) {
+        const hw = (s.scale * (frame.w / frame.h)) / 2; // quad half-width
+        const quads: [number, number, number, number][] = [
+          [s.x - hw, s.y, s.x + hw, s.y],
+          [s.x, s.y - hw, s.x, s.y + hw],
+        ];
+        for (const [qx0, qy0, qx1, qy1] of quads) {
+          const sx = qx1 - qx0;
+          const sy = qy1 - qy0;
+          const ax = qx0 - player.x;
+          const ay = qy0 - player.y;
+          for (let x = 0; x < W; x++) {
+            const camX = (2 * x) / W - 1;
+            const rx = dirX + planeX * camX;
+            const ry = dirY + planeY * camX;
+            const den = sx * ry - rx * sy;
+            if (den > -1e-9 && den < 1e-9) continue;
+            const ht = (-ax * sy + sx * ay) / den;
+            const hu = (rx * ay - ry * ax) / den;
+            if (ht < 0.03 || hu < 0 || hu > 1 || ht >= this.zbuf[x]) continue;
+            const perpH = H / ht;
+            const floorY = horizon + perpH * 0.5;
+            const yTop = Math.max(0, Math.ceil(floorY - perpH * s.scale));
+            const yBot = Math.min(H - 1, Math.floor(floorY));
+            if (yTop > yBot) continue;
+            const texU = Math.min(frame.w - 1, Math.floor(hu * frame.w));
+            const xb = x & 3;
+            const qfog = fogFactor(ht, this.fogNear, this.fogFar);
+            for (let y = yTop; y <= yBot; y++) {
+              const texV = Math.min(
+                frame.h - 1,
+                Math.floor(((y - yTop) / Math.max(1, yBot - yTop + 1)) * frame.h)
+              );
+              const ti = (texV * frame.w + texU) * 4;
+              if (frame.data[ti + 3] < 128) continue;
+              const dth = (BAYER[((y & 3) << 2) | xb] - 0.5) * DITHER_AMP;
+              const bp = Math.min(1, Math.max(0, bright + dth));
+              const o = (y * W + x) * 4;
+              buf[o] = lerp(frame.data[ti] * trC * bp, FOG_R, qfog);
+              buf[o + 1] = lerp(frame.data[ti + 1] * tgC * bp, FOG_G, qfog);
+              buf[o + 2] = lerp(frame.data[ti + 2] * tbC * bp, FOG_B, qfog);
+            }
+          }
+        }
+        continue;
+      }
+
+      const screenX = (W / 2) * (1 + tx / ty);
+      const sprH = (H / ty) * s.scale;
+      const sprW = sprH * (frame.w / frame.h);
+      // Anchor the sprite's feet on the floor at its depth.
+      const groundY = horizon + (0.5 * H) / ty;
+      const y0 = groundY - sprH;
+      const x0 = screenX - sprW / 2;
 
       const cx0 = Math.max(0, Math.floor(x0));
       const cx1 = Math.min(W - 1, Math.ceil(x0 + sprW));

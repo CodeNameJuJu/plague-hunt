@@ -1628,10 +1628,11 @@ export interface SpriteKind {
   scale: number; // fraction of a tile the sprite occupies vertically
   block: number; // collision radius in tiles, 0 = walk through
   animFps: number; // 0 = static
+  crossed?: boolean; // draw as perpendicular quads, not a flat billboard
 }
 
 export function buildSpriteKinds(): Record<string, SpriteKind> {
-  return {
+  const kinds: Record<string, SpriteKind> = {
     sconce: {
       frames: [sconceFrame(0), sconceFrame(1), sconceFrame(2), sconceFrame(3)],
       scale: 0.5,
@@ -1698,6 +1699,14 @@ export function buildSpriteKinds(): Record<string, SpriteKind> {
     sign_church: { frames: [signFrame("cross")], scale: 0.55, block: 0, animFps: 0 },
     sign_alchemist: { frames: [signFrame("flask")], scale: 0.55, block: 0, animFps: 0 },
   };
+  // People stand on crossed quads — a silhouette from every bearing, and no
+  // near-plane pop when one walks past your shoulder.
+  for (const k of [
+    "villager", "patrol", "guard", "shambler", "hooded",
+    "nun", "aubert", "digger", "widow", "innkeep", "baker", "alchemist", "patient",
+    "herbwife", "clothier", "monger", "anette",
+  ]) kinds[k].crossed = true;
+  return kinds;
 }
 
 // All villager dressings — a walk-cycle pair per variant. npcs.ts assigns

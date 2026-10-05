@@ -115,6 +115,38 @@ const villagers = makeVillagers(map);
 // vendors hold the plaza stalls while the sun is up.
 const patrols = makePatrols();
 const market = makeMarket(quest.npcs, sprites);
+
+// People dot the road scenes — folk in the fields and on the lane make the
+// journey feel travelled, and they're what the quarter lacks. Each stands on
+// a single walk frame; the key is the Shot.scene the shot films in.
+const introSceneSprites: Record<string, SpriteRuntime[]> = {};
+{
+  const vScale = spriteKinds.villager.scale;
+  const folk = (v: number, fr: number, x: number, y: number): SpriteRuntime => ({
+    kind: "villager",
+    x,
+    y,
+    frames: [villagerFrames[v % villagerFrames.length][fr % villagerFrames[0].length]],
+    scale: vScale,
+    block: 0,
+    animFps: 0,
+    crossed: true,
+  });
+  introSceneSprites.farmland = [
+    folk(5, 0, 7.8, 8.3),   // a fieldhand in the field gate, hoeing by the road
+    folk(5, 2, 6.0, 4.5),   // another deeper in the furrows, seen through the gap
+    folk(1, 1, 19.6, 7.1),  // the farmer's wife below the farmhouse door
+    folk(0, 3, 25.5, 10.3), // a pilgrim on the road ahead
+    folk(6, 0, 16.0, 10.8), // a mourner at the south verge
+  ];
+  introSceneSprites.countryside = [
+    folk(7, 1, 27.0, 9.3),  // the carter beside his emptied cart
+    folk(0, 2, 16.0, 8.6),  // a lone walker on the lane
+    folk(0, 1, 9.0, 8.7),   // another traveller nearer the camera
+    folk(3, 0, 16.5, 10.3), // a beggar sitting in the hedge gap
+    folk(1, 3, 24.3, 7.0),  // a woman watching from the field gate
+  ];
+}
 // Icons for the hotbar and pack — every item's sprite bitmap, keyed by name,
 // plus the sous piece for the purse slot.
 const icons = Object.fromEntries(
@@ -599,6 +631,7 @@ function frame(now: number): void {
         scale: spriteKinds.shambler.scale,
         block: 0,
         animFps: 2.4,
+        crossed: true,
       });
     }
   }
@@ -614,7 +647,7 @@ function frame(now: number): void {
       ? lights.concat(patrolLanterns(patrols))
       : lights;
   const allSprites = roadScene
-    ? []
+    ? introSceneSprites[roadScene] ?? []
     : sprites.concat(
         villagerSprites(villagers, villagerFrames, spriteKinds.villager.scale),
         patrolSprites(patrols, spriteKinds.patrol.frames, spriteKinds.patrol.scale),
