@@ -201,4 +201,29 @@ export const SEARCHES: Record<string, SearchSpot> = {
     items: [["leeches", 1], ["bandage", 1]],
     clue: "gleaming_cup",
   },
+  // Timber — boards pried from carts and crates, for barricading at night.
+  cart_timber: {
+    text: ["The cart's bed sheds its boards — you work the soundest ones free."],
+    items: [["planks", 1]],
+  },
+  timber_crate: {
+    text: ["Splitting the crate's lid — sawn planks, still stacked and dry."],
+    items: [["planks", 1]],
+  },
+  // The cure's makings — forage and jars, where the old texts say they live.
+  rue_bed: {
+    text: ["Rue rooted in the grave dirt — you strip the bitter leaves."],
+    items: [["rue", 1]],
+  },
+  leech_jar: {
+    text: ["A baited jar sunk at the well's rim — the leeches inside are fat and black."],
+    items: [["leeches", 1]],
+  },
+  specimen_jar: {
+    text: [
+      "A sealed jar among the dumped dead — the thing inside still gleams faintly.",
+      "This is what he fed them, before the body ruined it. The specimen.",
+    ],
+    items: [["specimen", 1]],
+  },
 };

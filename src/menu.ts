@@ -12,7 +12,6 @@ import {
   settings,
 } from "./settings";
 import type { Action } from "./settings";
-import { maskTex, texCanvas } from "./sprites";
 
 export interface Menu {
   setDead(dead: boolean): void;
@@ -65,15 +64,15 @@ export function initMenu(display: HTMLCanvasElement, onDescend: () => void): Men
 
   const panel = document.createElement("div");
   panel.className = "panel";
-  const emblem = texCanvas(maskTex());
-  emblem.className = "emblem";
   const title = document.createElement("h1");
+  title.textContent = "PLAGUE HUNT";
   const rule = document.createElement("div");
   rule.className = "rule";
   rule.textContent = "⸻";
   const sub = document.createElement("p");
   sub.className = "sub";
-  panel.append(emblem, title, rule, sub);
+  sub.textContent = "paris · anno domini 1348 · you are the plague doctor";
+  panel.append(title, rule, sub);
   const pages = document.createElement("div");
   panel.appendChild(pages);
   root.innerHTML = "";

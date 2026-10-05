@@ -23,7 +23,7 @@ import { ITEMS } from "./items";
 import { initAutopsy } from "./autopsy";
 import { initJournal } from "./journal";
 import { initShop } from "./shop";
-import { buildMap, isBlocked, openGate, updateDoors } from "./map";
+import { buildIntroMaps, buildMap, isBlocked, openGate, updateDoors } from "./map";
 import { makeNeeds, updateNeeds } from "./needs";
 import { makeVillagers, updateVillagers, villagerSprites } from "./npcs";
 import { makePlayer, updatePlayer } from "./player";
@@ -43,6 +43,8 @@ import { initMenu } from "./menu";
 import {
   attractShamblerSprites,
   beginIntro,
+  introLight,
+  introScene,
   introShamblerSprites,
   isIntroActive,
   updateAttract,
@@ -53,6 +55,7 @@ import { buildTextures } from "./textures";
 import type { SpriteRuntime } from "./types";
 
 const map = buildMap();
+const introMaps = buildIntroMaps(); // the road scenes — intro shots only
 const textures = buildTextures();
 const spriteKinds = buildSpriteKinds();
 const villagerFrames = villagerVariants();
@@ -84,6 +87,9 @@ const playerLight = {
   phase: 8.8,
 };
 const lights = [...map.lights, playerLight];
+// Each road scene carries its own lamps; the carried light rides along.
+const introSceneLights: Record<string, typeof lights> = {};
+for (const [name, m] of Object.entries(introMaps)) introSceneLights[name] = [...m.lights, playerLight];
 
 const player = makePlayer(map);
 const needs = makeNeeds();
@@ -536,16 +542,20 @@ function frame(now: number): void {
   }
 
   // The title backdrop plays at night whatever the hour — lit windows, fog.
-  const daylight = menuUp ? 0.12 : daylightAt(tday);
+  // Intro road shots carry their own daylight — the journey runs day and night.
+  const iLight = introLight();
+  const daylight = menuUp ? 0.12 : iLight ? iLight.day : daylightAt(tday);
   const ambient = AMBIENT_NIGHT + (AMBIENT_DAY - AMBIENT_NIGHT) * daylight;
   const fogNear = FOG_NIGHT_NEAR + (FOG_DAY_NEAR - FOG_NIGHT_NEAR) * daylight;
   const fogFar = FOG_NIGHT_FAR + (FOG_DAY_FAR - FOG_NIGHT_FAR) * daylight;
 
   // The lantern light trails the player's facing slightly, like it's swinging.
   // It dies when the lantern is stowed — darkness is the price of stealth.
-  // Intro and title shots keep a faint ambient glow so they stay readable.
+  // Intro and title shots keep a faint ambient glow so they stay readable;
+  // by day it barely registers, by night it carries the frame.
+  const dayScene = iLight && iLight.day > 0.4;
   playerLight.intensity = isIntroActive() || menuUp
-    ? PLAYER_LIGHT_INTENSITY * 0.6
+    ? PLAYER_LIGHT_INTENSITY * (dayScene ? 0.25 : 0.6)
     : lanternOut
       ? PLAYER_LIGHT_INTENSITY
       : 0;
@@ -568,13 +578,20 @@ function frame(now: number): void {
       });
     }
   }
-  const allSprites = sprites.concat(
-    villagerSprites(villagers, villagerFrames, spriteKinds.villager.scale),
-    isIntroActive() ? introShamblerSprites(spriteKinds.shambler.frames, spriteKinds.shambler.scale) : [],
-    menuUp ? attractShamblerSprites(spriteKinds.shambler.frames, spriteKinds.shambler.scale) : [],
-    extras
-  );
-  renderer.render(map, textures, allSprites, lights, player, time, ambient, daylight, menuUp ? 0.8 : tday, fogNear, fogFar);
+  // Road scenes film their own little maps — no city sprites on the road.
+  // The lantern is the only light that follows you between them.
+  const roadScene = introScene();
+  const sceneMap = roadScene ? introMaps[roadScene] : map;
+  const sceneLights = roadScene ? introSceneLights[roadScene] : lights;
+  const allSprites = roadScene
+    ? []
+    : sprites.concat(
+        villagerSprites(villagers, villagerFrames, spriteKinds.villager.scale),
+        isIntroActive() ? introShamblerSprites(spriteKinds.shambler.frames, spriteKinds.shambler.scale) : [],
+        menuUp ? attractShamblerSprites(spriteKinds.shambler.frames, spriteKinds.shambler.scale) : [],
+        extras
+      );
+  renderer.render(sceneMap, textures, allSprites, sceneLights, player, time, ambient, daylight, menuUp ? 0.8 : iLight ? iLight.sunT : tday, fogNear, fogFar);
 
   // The lantern in the left hand — hidden in cutscene/menus.
   if (isLocked() && !dead) {

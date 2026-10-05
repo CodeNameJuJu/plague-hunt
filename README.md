@@ -50,8 +50,8 @@ will slow your legs and then worse. The stipend (10 sous a day, from the
 provost) buys supplies in the free quarter: the baker's stall, the inn
 counter, Aubert's remedies. Sacks and chests in kitchens and sickrooms are
 searchable — they restock at dawn, and some hold more than supplies. Planks
-from debris piles barricade doors and windows, and are what you seal the
-sewer grate with. The dead on the pesthouse slab are examined through a
+pried from carts and timber crates barricade doors and windows, and are what
+you seal the sewer grate with. The dead on the pesthouse slab are examined through a
 small autopsy — four sites, four findings, one truth.
 
 ## Status

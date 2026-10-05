@@ -1,9 +1,12 @@
-// The opening sequence — the physician's arrival. A letter read under
-// black, then a walk in from the west end at nightfall: the plaza, the inn,
-// shapes crossing the street, and the cordon gate where the escort leaves
-// you. Hard cuts between shots, a slow dolly in each, a title drop at the
-// end. No pointer lock; any click or key skips to the game, which locks on
-// that gesture.
+// The opening sequence — the physician's journey. A letter read under
+// black, then the road west to the city: woods by day, a shuttered town at
+// night, farmland, the high pass, another city's canyon, the last bare
+// countryside — then the west end at nightfall: the plaza, the inn, shapes
+// crossing the street, and the cordon gate where the escort leaves you.
+// The road scenes are their own little maps (buildIntroMaps); `scene` names
+// which one a shot films in, `day`/`sunT` carry its light. Hard cuts, a
+// slow dolly in each, a title drop at the end. No pointer lock; any click
+// or key skips to the game, which locks on that gesture.
 
 import type { Player } from "./player";
 import type { SpriteRuntime } from "./types";
@@ -21,16 +24,46 @@ interface Shot {
   veil?: boolean;  // camera parked under black — letter shots
   bob?: number;    // head-bob amplitude — walking shots
   sway?: number;   // slow angle drift — looking around while walking
+  scene?: string;  // a buildIntroMaps key — the road scenes' maps
+  day?: number;    // daylight 0..1 for this shot (defaults to night)
+  sunT?: number;   // day fraction — drives the sun's bearing
 }
 
 const SHOTS: Shot[] = [
   // The commission — a letter read under black.
   { x: 0, y: 0, tx: 0, ty: 0, pitch: 0, dolly: 0, dur: 5.4, veil: true,
     card: "master physician —\n\nby decree of the provost of paris you are\ncommanded to this city. the pestilence\nin the east quarter does not abate.\n\nmake haste." },
+  // The road west — woods by day.
+  { x: 1.6, y: 8.5, tx: 26, ty: 8.5, pitch: 0, dolly: 8.5, dur: 5.8, bob: 1.5, sway: 0.05, scene: "woods", day: 0.9, sunT: 0.3,
+    card: "west, to paris. the road runs under the trees —\nfirst light through the leaves, dew on the ruts." },
+  // A town passed by night — doors barred, lamps lit, no one out.
+  { x: 1.5, y: 7.5, tx: 30, ty: 7.5, pitch: 1, dolly: 9, dur: 5.4, bob: 1.5, sway: 0.04, scene: "town", day: 0.09, sunT: 0.92,
+    card: "the villages bar their doors after dark —\nyou ride through with the escort's lantern, ungreeted." },
+  // Farmland in daylight — fields half-gathered, one farmhouse.
+  { x: 1.5, y: 9.5, tx: 32, ty: 10, pitch: -1, dolly: 9.5, dur: 6.0, bob: 1.5, sway: 0.04, scene: "farmland", day: 1, sunT: 0.45,
+    card: "the fields stand half-gathered — the hands\nthat should cut them are dying somewhere east." },
+  // The woods again — night this time, the lamp ahead the only promise.
+  { x: 4.5, y: 8.5, tx: 33.6, ty: 7.4, pitch: 1, dolly: 7.5, dur: 5.4, bob: 1.5, sway: 0.05, scene: "woods", day: 0.1, sunT: 0.95,
+    card: "the wood at night is another country —\nthe lantern stays low, the pace stays up." },
+  // Over the mountain — the pass by day…
+  { x: 1.5, y: 9.7, tx: 30, ty: 10.5, pitch: 4, dolly: 8.5, dur: 5.8, bob: 1.5, sway: 0.04, scene: "mountain", day: 0.85, sunT: 0.55,
+    card: "the high pass — thin air, crows,\nand the road ribboning down." },
+  // …and by night, the crest.
+  { x: 24.5, y: 11.5, tx: 38, ty: 12.5, pitch: 3, dolly: 5.5, dur: 4.8, bob: 1.5, sway: 0.04, scene: "mountain", day: 0.12, sunT: 0.94,
+    card: "you crest in the dark — wind and frost.\nsomewhere below, a smudge of lamps." },
+  // Another city, by day — taller and tighter, and still quiet.
+  { x: 1.5, y: 7.5, tx: 30, ty: 7.5, pitch: 2, dolly: 9, dur: 5.6, bob: 1.5, sway: 0.03, scene: "city", day: 1, sunT: 0.5,
+    card: "towns pass like fever dreams — senlis,\nthen louvres. each quieter than the last." },
+  // The last countryside — empty roads, empty fields.
+  { x: 1.5, y: 8.5, tx: 30, ty: 8.5, pitch: 0, dolly: 9, dur: 5.6, bob: 1.5, sway: 0.04, scene: "countryside", day: 0.95, sunT: 0.6,
+    card: "the last day. the nearer paris, the emptier the\nroads — carts coming out, and none going in." },
+  // The treeline breaks — first roofs, the gate's lamp. Night falls.
+  { x: 18.5, y: 8.5, tx: 34, ty: 8.5, pitch: 1, dolly: 6.0, dur: 5.4, bob: 1.5, sway: 0.03, scene: "woods", day: 0.12, sunT: 0.9,
+    card: "then lamps, and a gate kept shut.\nparis does not open its doors for anyone." },
   // The road in — walking the west end of the main street at nightfall,
   // facades leaning into the fog.
   { x: 1.5, y: 21.7, tx: 32, ty: 21.7, pitch: 1, dolly: 9.5, dur: 6.2, bob: 1.5, sway: 0.03,
-    card: "paris · anno domini 1348\n\ntwo days on the road, most of it rain.\nyou reach the west end as the lamps come on." },
+    card: "paris · anno domini 1348\n\nyou reach the west end as the lamps come on." },
   // Deeper in — shutters closing ahead of the stranger.
   { x: 12, y: 21.8, tx: 42, ty: 21.7, pitch: 2, dolly: 7.5, dur: 5.6, bob: 1.5, sway: 0.04,
     card: "nobody looks up. nobody lingers.\nthe shutters close as you pass." },
@@ -94,6 +127,21 @@ export function isIntroActive(): boolean {
   return active;
 }
 
+// The scene the current shot films in — a buildIntroMaps key, or null for
+// the city itself (arrival shots and anything under the veil).
+export function introScene(): string | null {
+  return active ? SHOTS[idx]?.scene ?? null : null;
+}
+
+// The shot's light — daylight level and sun bearing. City/veiled shots fall
+// back to the game's own night.
+export function introLight(): { day: number; sunT: number } | null {
+  if (!active) return null;
+  const s = SHOTS[idx];
+  if (!s || s.scene === undefined) return null;
+  return { day: s.day ?? 0.05, sunT: s.sunT ?? 0.9 };
+}
+
 export function beginIntro(done: () => void): void {
   el = document.getElementById("intro")!;
   card = el.querySelector(".card")!;
@@ -113,8 +161,9 @@ export function beginIntro(done: () => void): void {
   );
   setTimeout(() => {
     if (!active) return;
-    enter(); // shots[0] under the veil, then lift it
-    if (veil) veil.style.opacity = "0";
+    // enter() sets the veil per shot — the letter stays under black until
+    // the first road shot drops it on the cut.
+    enter();
   }, 60);
   setTimeout(() => {
     window.addEventListener("keydown", skip, true);

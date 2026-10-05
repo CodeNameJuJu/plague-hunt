@@ -34,6 +34,7 @@ export const SHOPS: Record<string, ShopWare[]> = {
   innkeep: [
     { item: "bread", price: 4 },
     { item: "skin", price: 3 },
+    { item: "planks", price: 3 },
   ],
   aubert: [
     { item: "bandage", price: 4 },

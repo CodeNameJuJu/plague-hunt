@@ -64,7 +64,7 @@ export const EXHAUST_DAMAGE = 1.2; // health/s at zero fatigue
 // Interaction
 export const INTERACT_RANGE = 1.8;
 export const BARRICADE_COST = 1; // planks per barricade
-export const PLANK_PICKUP = 3; // planks per debris pile
+export const PLANK_PICKUP = 3; // planks per timber found
 export const BARRICADE_WALL_ID = 6;
 
 // The wights in the sewers — the alchemist's dumped failures, walking again.

@@ -51,17 +51,6 @@ body {
   user-select: none;
 }
 
-.panel .emblem {
-  display: block;
-  width: 108px;
-  height: 108px;
-  margin: 0 auto 6px;
-  image-rendering: pixelated;
-  object-fit: contain;
-  filter: drop-shadow(0 0 16px rgba(210, 130, 50, 0.28)) drop-shadow(0 3px 8px #000);
-  animation: ember-glow 4.2s ease-in-out infinite;
-}
-
 .panel h1 {
   font-size: 56px;
   font-weight: normal;

@@ -362,10 +362,6 @@ function segDist(px: number, py: number, x0: number, y0: number, x1: number, y1:
   return Math.hypot(px - (x0 + dx * t), py - (y0 + dy * t));
 }
 
-// Clutter pickups stripped from the streets — supplies come from the shops
-// now. Planks (grate-seal material), the quest makings and the letters stay.
-const SCATTER_PICKUPS = new Set(["bread", "skin", "cloth", "bandage"]);
-
 // The cordon — a palisade sealing the quarantine quarter, and its one gap.
 // The gap starts blocked by a timber hurdle the guard watches, opened in play.
 const CORDON_X = 61;
@@ -551,14 +547,16 @@ const SEWER_OPEN = [
 const WATER_ROW_Y = 77;
 
 // ---------------------------------------------------------------------------
-// Props and pickups. Pickups respawn each dawn.
+// Props and containers. Nothing lies loose on the ground — supplies come
+// from the shops, or from searchable sacks, chests, carts and jars that
+// restock each dawn.
 
 const SPRITES: SpriteDef[] = [
   // The plaza
   { kind: "well", x: 31.5, y: 21.7 },
   { kind: "brazier", x: 29.7, y: 23.4 },
   { kind: "brazier", x: 33.4, y: 19.7 },
-  { kind: "cart", x: 24.5, y: 21.6 },
+  { kind: "cart", x: 24.5, y: 21.6, search: "cart_timber", examine: "the cart's bed" },
 
   // Street flames — sparse; nights stay dark between them
   { kind: "torch", x: 5.5, y: 21.4 },
@@ -571,12 +569,12 @@ const SPRITES: SpriteDef[] = [
   { kind: "torch", x: 40.5, y: 34.4 },
   { kind: "torch", x: 15.5, y: 14.5 },
   { kind: "torch", x: 45.5, y: 28.5 },
-  { kind: "cart", x: 45.6, y: 15.5 },
-  { kind: "cart", x: 10.5, y: 34.6 },
+  { kind: "cart", x: 45.6, y: 15.5, search: "cart_timber", examine: "the cart's bed" },
+  { kind: "cart", x: 10.5, y: 34.6, search: "cart_timber", examine: "the cart's bed" },
 
   // By the gate — the provost's fire, and the corpse cart waiting to go east
   { kind: "brazier", x: 59.5, y: 22.6 },
-  { kind: "cart", x: 58.5, y: 22.4 },
+  { kind: "cart", x: 58.5, y: 22.4, search: "cart_timber", examine: "the corpse cart" },
 
   // Green among the stone — planted where it makes sense: the plaza's
   // corners, the graveyard, the dirt gaps between buildings where alleys
@@ -605,29 +603,11 @@ const SPRITES: SpriteDef[] = [
   { kind: "tuft", x: 53.5, y: 30.6 },
   { kind: "tuft", x: 78.5, y: 9.4 },   // the park gone shaggy
 
-  // Debris piles — plank pickups in the streets and alleys
-  { kind: "planks", x: 7.5, y: 21.5, pickup: "planks" },
-  { kind: "planks", x: 35.6, y: 22.5, pickup: "planks" },
-  { kind: "planks", x: 18.5, y: 9.5, pickup: "planks" },
-  { kind: "planks", x: 50.5, y: 34.5, pickup: "planks" },
-  { kind: "planks", x: 29.5, y: 30.5, pickup: "planks" },
-  { kind: "planks", x: 15.6, y: 25.5, pickup: "planks" },
-  { kind: "planks", x: 8.5, y: 12.5, pickup: "planks" },
-  { kind: "planks", x: 45.5, y: 40.5, pickup: "planks" },
-  { kind: "planks", x: 63.5, y: 24.5, pickup: "planks" },
-  { kind: "planks", x: 80.5, y: 33.6, pickup: "planks" },
-
   // Bakery — fire in the hearth, bread on the shelf, stairs to the loft
   { kind: "torch", x: 4.5, y: 4.5 },
   { kind: "stairs", x: 2.5, y: 2.5, stairLink: { x: 4.5, y: 50.5 } },
-  { kind: "bread", x: 3.5, y: 6.5, pickup: "bread" },
-  { kind: "bread", x: 5.5, y: 6.4, pickup: "bread" },
-  { kind: "planks", x: 6.4, y: 2.5, pickup: "planks" },
   // Tenement — a brazier keeps the dark off
   { kind: "brazier", x: 11.5, y: 2.6 },
-  { kind: "planks", x: 10.5, y: 3.5, pickup: "planks" },
-  { kind: "planks", x: 13.4, y: 6.4, pickup: "planks" },
-  { kind: "bread", x: 12.5, y: 6.5, pickup: "bread" },
   { kind: "table", x: 11.5, y: 4.5 },
   // The inn — the warmest room in the city, and your lodgings upstairs
   { kind: "torch", x: 20.5, y: 4.5 },
@@ -637,26 +617,18 @@ const SPRITES: SpriteDef[] = [
   { kind: "table", x: 23.4, y: 5.5 },
   { kind: "barrel", x: 18.5, y: 6.5 },
   { kind: "barrel", x: 23.4, y: 2.5 },
-  { kind: "bread", x: 21.5, y: 3.4, pickup: "bread" },
-  { kind: "skin", x: 18.6, y: 5.5, pickup: "skin" },
   // Stone house
   { kind: "torch", x: 26.5, y: 4.5 },
-  { kind: "skin", x: 26.5, y: 6.5, pickup: "skin" },
   { kind: "bed", x: 26.5, y: 2.6, rot: 1.5708 },
   // Apothecary
   { kind: "torch", x: 34.5, y: 4.5 },
   { kind: "stairs", x: 36.4, y: 6.4, rot: 1.5708, stairLink: { x: 24.5, y: 50.5 } },
-  { kind: "bread", x: 33.5, y: 6.5, pickup: "bread" },
-  { kind: "planks", x: 36.4, y: 2.5, pickup: "planks" },
   { kind: "table", x: 32.5, y: 3.5 },
   // Dark house
   { kind: "brazier", x: 41.5, y: 2.6 },
-  { kind: "planks", x: 40.5, y: 6.5, pickup: "planks" },
-  { kind: "skin", x: 42.5, y: 3.5, pickup: "skin" },
   { kind: "bed", x: 39.5, y: 2.6, rot: 1.5708 },
   // Chapel house
   { kind: "brazier", x: 49.5, y: 4.5 },
-  { kind: "bread", x: 50.5, y: 6.4, pickup: "bread" },
   // North-east house
   { kind: "torch", x: 56, y: 4.5 },
   { kind: "barrel", x: 57.4, y: 6.5 },
@@ -664,75 +636,54 @@ const SPRITES: SpriteDef[] = [
   // Middle band
   { kind: "torch", x: 3.5, y: 15.5 },
   { kind: "stairs", x: 2.5, y: 19.3, rot: 3.1416, stairLink: { x: 33.5, y: 50.5 } },
-  { kind: "planks", x: 5.5, y: 18.5, pickup: "planks" },
-  { kind: "crate", x: 4.5, y: 12.5 },
+  { kind: "crate", x: 4.5, y: 12.5, search: "timber_crate", examine: "the timber crate" },
   { kind: "table", x: 4.5, y: 16.5 },
   { kind: "brazier", x: 12.5, y: 16.5 },
-  { kind: "bread", x: 10.5, y: 18.5, pickup: "bread" },
   { kind: "torch", x: 19.5, y: 13.5 },
   { kind: "crate", x: 18.5, y: 18.5 },
   { kind: "barrel", x: 21.5, y: 18.5 },
   { kind: "bed", x: 21.4, y: 11.6, rot: 3.1416 },
   { kind: "torch", x: 26, y: 14.5 },
-  { kind: "skin", x: 26.5, y: 17.5, pickup: "skin" },
   // Middle east
-  { kind: "crate", x: 32.5, y: 13.5 },
-  { kind: "crate", x: 35.5, y: 14.5 },
-  { kind: "planks", x: 33.5, y: 12.5, pickup: "planks" },
-  { kind: "bread", x: 36.4, y: 18.5, pickup: "bread" },
-  { kind: "planks", x: 42.5, y: 18.5, pickup: "planks" },
+  { kind: "crate", x: 32.5, y: 13.5, search: "timber_crate", examine: "the timber crate" },
+  { kind: "crate", x: 35.5, y: 14.5, search: "timber_crate", examine: "the timber crate" },
   { kind: "brazier", x: 40.5, y: 13.5 },
   { kind: "bed", x: 43.4, y: 11.6, rot: 3.1416 },
   { kind: "torch", x: 49.5, y: 13.5 },
   { kind: "barrel", x: 51.4, y: 18.4 },
   { kind: "torch", x: 56, y: 15 },
-  { kind: "skin", x: 56.5, y: 18.5, pickup: "skin" },
   // South band
   { kind: "torch", x: 4, y: 28 },
   { kind: "stairs", x: 6.4, y: 32.4, rot: 3.1416, stairLink: { x: 43.5, y: 50.5 } },
-  { kind: "planks", x: 3.5, y: 31.5, pickup: "planks" },
   { kind: "barrel", x: 6.4, y: 25.4 },
   { kind: "torch", x: 11.5, y: 28 },
-  { kind: "bread", x: 12.5, y: 31.5, pickup: "bread" },
   { kind: "table", x: 12.5, y: 26.5 },
-  { kind: "skin", x: 21.5, y: 31.5, pickup: "skin" },
-  { kind: "planks", x: 18.5, y: 25.5, pickup: "planks" },
   { kind: "brazier", x: 21.5, y: 28.5 },
   { kind: "bed", x: 18.5, y: 24.6, rot: 1.5708 },
   { kind: "torch", x: 26, y: 25.5 },
   { kind: "crate", x: 25.5, y: 31.4 },
   { kind: "torch", x: 36.5, y: 25.5 },
-  { kind: "bread", x: 37.4, y: 31.4, pickup: "bread" },
-  { kind: "planks", x: 43.4, y: 31.5, pickup: "planks" },
   { kind: "brazier", x: 41.5, y: 27.5 },
   { kind: "barrel", x: 40.5, y: 25.5 },
   { kind: "torch", x: 49.5, y: 28 },
-  { kind: "skin", x: 51.5, y: 31.5, pickup: "skin" },
   { kind: "bed", x: 48.5, y: 24.6, rot: 1.5708 },
   { kind: "torch", x: 56, y: 28 },
-  { kind: "planks", x: 57.4, y: 31.4, pickup: "planks" },
   // Bottom band
   { kind: "torch", x: 4, y: 38.5 },
   { kind: "barrel", x: 2.5, y: 40.5 },
   { kind: "bed", x: 5.5, y: 36.6, rot: 1.5708 },
-  { kind: "planks", x: 13.4, y: 40.4, pickup: "planks" },
   { kind: "brazier", x: 11.5, y: 38.6 },
   { kind: "torch", x: 20, y: 38.5 },
-  { kind: "bread", x: 18.5, y: 40.5, pickup: "bread" },
   { kind: "table", x: 21.5, y: 40.5 },
   { kind: "torch", x: 26, y: 38.5 },
-  { kind: "crate", x: 25.5, y: 40.5 },
-  { kind: "skin", x: 32.5, y: 40.4, pickup: "skin" },
-  { kind: "planks", x: 36.4, y: 40.4, pickup: "planks" },
+  { kind: "crate", x: 25.5, y: 40.5, search: "timber_crate", examine: "the timber crate" },
   { kind: "brazier", x: 34.5, y: 38.8 },
   { kind: "bed", x: 36.4, y: 36.6, rot: 1.5708 },
   { kind: "torch", x: 41, y: 38.5 },
-  { kind: "bread", x: 42.5, y: 40.5, pickup: "bread" },
   // The church — candlelit, and its tower climbs to the last loft
   { kind: "brazier", x: 53.5, y: 37.5 },
   { kind: "brazier", x: 56.5, y: 37.5 },
   { kind: "stairs", x: 57.4, y: 36.5, stairLink: { x: 54.5, y: 50.5 } },
-  { kind: "bread", x: 55, y: 40.5, pickup: "bread" },
   // The graveyard — open dirt, graves and a dead tree
   { kind: "grave", x: 48.5, y: 37.5 },
   { kind: "grave", x: 50.5, y: 39.5 },
@@ -744,7 +695,7 @@ const SPRITES: SpriteDef[] = [
   { kind: "brazier", x: 63.5, y: 21.6 },
   { kind: "torch", x: 74.5, y: 21.4 },
   { kind: "torch", x: 86.5, y: 22.6 },
-  { kind: "cart", x: 66.5, y: 22.6 },
+  { kind: "cart", x: 66.5, y: 22.6, search: "cart_timber", examine: "the bodies' cart" },
   // The marquee — cots under canvas, the slab, Marguerite's vigil
   { kind: "bed", x: 65.6, y: 13.5, rot: 1.5708 },
   { kind: "bed", x: 69.5, y: 13.5, rot: 1.5708 },
@@ -759,8 +710,6 @@ const SPRITES: SpriteDef[] = [
   { kind: "brazier", x: 70.5, y: 5.8 },
   { kind: "brazier", x: 81.5, y: 15.2 },
   { kind: "bed", x: 77.5, y: 13.6, rot: 1.5708 }, // a cot inside a marquee
-  { kind: "bread", x: 78.5, y: 18.5, pickup: "bread" }, // dropped rations
-  { kind: "skin", x: 84.5, y: 18.7, pickup: "skin" },
   // The alchemist's shuttered shop — the alembic still warm, his ledger out
   { kind: "alembic", x: 72.4, y: 25.5 },
   { kind: "table", x: 69.5, y: 26.5 },
@@ -770,12 +719,9 @@ const SPRITES: SpriteDef[] = [
   // The old town — condemned tenements, sparse candles, a little salvage
   // left in houses nobody lives in any more.
   { kind: "brazier", x: 86.5, y: 25.5 },
-  { kind: "bandage", x: 84.5, y: 30.5, pickup: "bandage" },
-  { kind: "planks", x: 65.3, y: 31.2, pickup: "planks" },
-  { kind: "crate", x: 77.5, y: 30.5 },
+  { kind: "crate", x: 77.5, y: 30.5, search: "timber_crate", examine: "a scavenge crate" },
   { kind: "bed", x: 78.5, y: 24.6, rot: 1.5708 },
   { kind: "torch", x: 66, y: 38.5 },
-  { kind: "bread", x: 65.5, y: 40.5, pickup: "bread" },
   { kind: "bed", x: 69.5, y: 36.6, rot: 1.5708 },
   { kind: "brazier", x: 76.5, y: 38.5 },
   { kind: "barrel", x: 84.5, y: 40.5 },
@@ -784,28 +730,22 @@ const SPRITES: SpriteDef[] = [
   { kind: "stairs", x: 4.5, y: 50.5, rot: 3.1416, stairLink: { x: 2.5, y: 2.5 } },
   { kind: "bed", x: 7.5, y: 47.5, rot: 1.5708 },
   { kind: "torch", x: 6.5, y: 50.5 },
-  { kind: "bread", x: 3.5, y: 47.5, pickup: "bread" },
   { kind: "stairs", x: 14.5, y: 50.5, rot: 3.1416, stairLink: { x: 18.5, y: 2.5 } },
   { kind: "homebed", x: 17.5, y: 47.5, rot: 1.5708 }, // the doctor's room — sleep here
   { kind: "desk", x: 13.4, y: 49.2 },
   { kind: "torch", x: 16, y: 50.5 },
-  { kind: "skin", x: 13, y: 47.5, pickup: "skin" },
   { kind: "stairs", x: 24.5, y: 50.5, rot: 3.1416, stairLink: { x: 36.4, y: 6.4 } },
   { kind: "bed", x: 27.5, y: 47.5, rot: 1.5708 },
   { kind: "torch", x: 25, y: 50.5 },
-  { kind: "planks", x: 23, y: 47.5, pickup: "planks" },
   { kind: "stairs", x: 33.5, y: 50.5, rot: 3.1416, stairLink: { x: 2.5, y: 19.3 } },
   { kind: "bed", x: 37.5, y: 47.5, rot: 1.5708 },
   { kind: "torch", x: 35, y: 50.5 },
-  { kind: "bread", x: 33, y: 47.5, pickup: "bread" },
   { kind: "stairs", x: 43.5, y: 50.5, rot: 3.1416, stairLink: { x: 6.4, y: 32.4 } },
   { kind: "bed", x: 47.5, y: 47.5, rot: 1.5708 },
   { kind: "torch", x: 45, y: 50.5 },
-  { kind: "skin", x: 42.5, y: 47.5, pickup: "skin" },
   { kind: "stairs", x: 54.5, y: 50.5, rot: 3.1416, stairLink: { x: 57.4, y: 36.5 } },
   { kind: "bed", x: 56.5, y: 47.5, rot: 1.5708 },
   { kind: "brazier", x: 52.5, y: 50.5 },
-  { kind: "bread", x: 53.5, y: 47.5, pickup: "bread" },
 
   // The sewers — a lamp at the landing, a brazier someone keeps lit in the pit
   { kind: "grate", x: 76.5, y: 66.5, stairLink: { x: 71.5, y: 32.4 } },
@@ -814,7 +754,7 @@ const SPRITES: SpriteDef[] = [
   { kind: "brazier", x: 86.5, y: 82.5 },
   { kind: "corpsepile", x: 83.5, y: 78.5 },
   { kind: "corpsepile", x: 80.5, y: 81.5 },
-  { kind: "specimen", x: 82.5, y: 76.5, pickup: "specimen" },
+  { kind: "specimen", x: 82.5, y: 76.5, search: "specimen_jar", examine: "the sealed jar" },
   { kind: "letter", x: 58.5, y: 74.5, letter: 5 },
 
   // Searchable containers — the scavenging game. Each holds a loot table
@@ -841,11 +781,11 @@ const SPRITES: SpriteDef[] = [
   { kind: "marks", x: 84.5, y: 80.5, examine: "the bones that stir", clue: "sewer_dead" },
 
   // The cure's makings — rue grows over the graves, leeches by the well.
-  { kind: "rue", x: 47.5, y: 40.4, pickup: "rue" },
-  { kind: "rue", x: 49.6, y: 37.2, pickup: "rue" },
-  { kind: "rue", x: 50.8, y: 41.6, pickup: "rue" },
-  { kind: "leeches", x: 30.4, y: 23.4, pickup: "leeches" },
-  { kind: "leeches", x: 33.2, y: 22.6, pickup: "leeches" },
+  { kind: "rue", x: 47.5, y: 40.4, search: "rue_bed", examine: "the rue bed" },
+  { kind: "rue", x: 49.6, y: 37.2, search: "rue_bed", examine: "the rue bed" },
+  { kind: "rue", x: 50.8, y: 41.6, search: "rue_bed", examine: "the rue bed" },
+  { kind: "leeches", x: 30.4, y: 23.4, search: "leech_jar", examine: "the leech jar" },
+  { kind: "leeches", x: 33.2, y: 22.6, search: "leech_jar", examine: "the leech jar" },
   // Letters left behind — readable scraps of the plague's story.
   { kind: "letter", x: 12.3, y: 5.2, letter: 0 }, // a mother's letter, north-street house
   { kind: "letter", x: 55.5, y: 38.5, letter: 1 }, // the cordon order, in the church
@@ -1126,7 +1066,6 @@ export function buildMap(): GameMap {
     return null;
   };
   const keptSprites = SPRITES.filter((s) => {
-    if (s.pickup !== undefined && SCATTER_PICKUPS.has(s.pickup)) return false;
     if (s.kind === "torch" || s.kind === "brazier") {
       const m = sconceMount(s.x, s.y);
       if (m) {
@@ -1299,4 +1238,292 @@ export function isBlocked(map: GameMap, x: number, y: number, r: number, through
     if (dx * dx + dy * dy < rr * rr) return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// The intro's journey — standalone little scenes that only the opening shots
+// film, never walked by the player. Each is a small corridor or open field
+// built from the same vocabulary as the city: dirt tracks, leaf-mass walls
+// as treeline and hedges, stone and timber facades, prop scatter.
+
+// An empty open-air scene — grass, sky, no walls. Scenes fill from here.
+function introShell(w: number, h: number, floor = F_GRASS): GameMap {
+  return {
+    w,
+    h,
+    walls: new Uint8Array(w * h),
+    wallUp: new Uint8Array(w * h),
+    wallIn: new Uint8Array(w * h),
+    wallH: new Float32Array(w * h).fill(1),
+    openSkin: new Uint8Array(w * h),
+    floorTex: new Uint8Array(w * h).fill(floor),
+    ceilTex: new Uint8Array(w * h).fill(C_SKY),
+    ceilH: new Float32Array(w * h).fill(1),
+    doorways: new Set(),
+    windows: new Set(),
+    doors: [],
+    sprites: [],
+    props: [],
+    lights: [],
+    landmarks: [],
+    spawnX: 1.6,
+    spawnY: 8.5,
+    spawnAngle: 0,
+  };
+}
+
+// A solid wall run along a row — the scene builders' one shared tool.
+function wallRun(m: GameMap, y: number, x0: number, x1: number, tex: number, hh = 1): void {
+  for (let x = x0; x <= x1; x++) {
+    const i = y * m.w + x;
+    m.walls[i] = tex;
+    m.wallH[i] = hh;
+  }
+}
+function wallCol(m: GameMap, x: number, y0: number, y1: number, tex: number, hh = 1): void {
+  for (let y = y0; y <= y1; y++) {
+    const i = y * m.w + x;
+    m.walls[i] = tex;
+    m.wallH[i] = hh;
+  }
+}
+function floorRect(m: GameMap, x0: number, y0: number, x1: number, y1: number, f: number): void {
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++) m.floorTex[y * m.w + x] = f;
+}
+
+// The forest road — a dirt track east under a ragged leaf-mass treeline,
+// ending at the city's wall and its one lit gate lamp.
+function woodsMap(): GameMap {
+  const m = introShell(36, 18);
+  // The wood itself — solid foliage walls either side, the inner edge
+  // ragged per column so it reads as grown trees rather than a hedge.
+  for (let x = 0; x < m.w; x++) {
+    const j = (x * 7 + 3) % 3;
+    for (let y = 0; y < 4 + j; y++) {
+      m.walls[y * m.w + x] = W_FOLIAGE;
+      m.wallH[y * m.w + x] = 1.6;
+    }
+    for (let y = m.h - 1; y > 13 - j; y--) {
+      m.walls[y * m.w + x] = W_FOLIAGE;
+      m.wallH[y * m.w + x] = 1.6;
+    }
+  }
+  wallCol(m, 0, 0, m.h - 1, W_FOLIAGE, 1.6);
+  wallCol(m, 35, 0, m.h - 1, W_STONE, 1.5);
+  // The road — a dirt track east, cobbles where the faubourg begins.
+  for (let x = 0; x < 35; x++) {
+    const f = x > 30 ? F_COBBLE : F_DIRT;
+    m.floorTex[8 * m.w + x] = f;
+    m.floorTex[9 * m.w + x] = f;
+  }
+  // The gate — a stone face across the road's end, open at the gap.
+  wallCol(m, 34, 0, m.h - 1, W_STONE, 1.6);
+  m.walls[8 * m.w + 34] = 0;
+  m.walls[9 * m.w + 34] = 0;
+
+  // Trees crowding both verges — some dead, the odd one pushed deeper into
+  // the leaf wall for silhouette depth. Deterministic scatter.
+  for (let i = 0; i < 13; i++) {
+    const x = 2 + i * 2.4;
+    m.props.push(PROP_BUILDERS[i % 4 === 1 ? "deadTree" : "tree"](x + (i % 3) * 0.25, 6.0 + (i % 2) * 1.1));
+    m.props.push(PROP_BUILDERS[i % 5 === 3 ? "deadTree" : "tree"](x + ((i + 2) % 3) * 0.3, 12.1 - (i % 2) * 1.2));
+    if (i % 4 === 2) m.props.push(PROP_BUILDERS.tree(x + 1.1, i % 8 === 2 ? 5.0 : 13.3));
+  }
+  // A wayside grave and an abandoned cart — someone else took this road.
+  m.props.push(PROP_BUILDERS.grave(12.4, 10.3));
+  m.props.push(PROP_BUILDERS.grave(12.9, 10.6));
+  m.props.push(PROP_BUILDERS.cart(26.5, 9.7));
+  m.props.push(PROP_BUILDERS.tuft(7.4, 9.8));
+  m.props.push(PROP_BUILDERS.tuft(18.8, 7.2));
+  m.props.push(PROP_BUILDERS.tuft(29.5, 10.4));
+  // The gate's lamp — the only lit thing in the wood.
+  m.props.push(PROP_BUILDERS.lamp(33.6, 7.4));
+  m.lights.push({ x: 33.6, y: 7.4, radius: 5.5, intensity: 0.9, warm: 1, phase: 1.4 });
+  return m;
+}
+
+// A village street — squat timber and brick facades crowding a dirt lane,
+// two lamps lit against the night. Filmed only in the dark.
+function townMap(): GameMap {
+  const m = introShell(34, 14, F_DIRT);
+  // Facades either side of the street — heights vary, a few doors cut in.
+  for (let x = 1; x < 33; x++) {
+    const tex = x % 5 === 0 ? W_BRICK : x % 3 === 0 ? W_STONE : W_TIMBER;
+    const hh = 1.3 + ((x * 11) % 4) * 0.22;
+    wallRun(m, 6, x, x, x % 7 === 0 ? 4 : tex, hh);           // north row, the odd door
+    wallRun(m, 9, x, x, x % 6 === 0 ? 4 : tex, hh * 0.94);     // south row
+    // The odd lit window — lamp glass let into the facade.
+    if ((x * 7 + 2) % 13 === 0) m.walls[6 * m.w + x] = W_LAMP;
+    if ((x * 5 + 1) % 11 === 0) m.walls[9 * m.w + x] = W_LAMP;
+  }
+  wallCol(m, 0, 0, m.h - 1, W_TIMBER, 1.5);
+  wallCol(m, 33, 0, m.h - 1, W_BRICK, 1.7);
+  // Street furniture — a cart, barrels at a door, a wayside cross of sorts.
+  m.props.push(PROP_BUILDERS.cart(20.5, 8.9));
+  m.props.push(PROP_BUILDERS.barrel(9.5, 6.8));
+  m.props.push(PROP_BUILDERS.barrel(10.3, 6.8));
+  m.props.push(PROP_BUILDERS.crate(15.5, 9.4));
+  m.props.push(PROP_BUILDERS.lamp(8.4, 7.4));
+  m.props.push(PROP_BUILDERS.lamp(25.6, 8.6));
+  m.lights.push(
+    { x: 8.4, y: 7.4, radius: 5.5, intensity: 0.9, warm: 1, phase: 0.7 },
+    { x: 25.6, y: 8.6, radius: 5.5, intensity: 0.9, warm: 1, phase: 2.3 }
+  );
+  return m;
+}
+
+// Farmland — open fields either side of a bending dirt road. Ploughed
+// furrows north, pasture south, hedgerows at the field edges, a farmhouse
+// and hayricks. The horizon just runs out into sky.
+function farmlandMap(): GameMap {
+  const m = introShell(40, 20);
+  // The road — a dirt track that bends south near the far end.
+  for (let x = 0; x < m.w; x++) {
+    const ry = x > 24 ? 10 : 9;
+    m.floorTex[ry * m.w + x] = F_DIRT;
+    m.floorTex[(ry + 1) * m.w + x] = F_DIRT;
+  }
+  // North field — ploughed furrows striped into the grass, hedged.
+  floorRect(m, 3, 2, 15, 7, F_DIRT);
+  for (let y = 3; y < 7; y += 2) floorRect(m, 3, y, 15, y, F_GRASS); // crop rows left standing
+  wallRun(m, 1, 2, 16, W_FOLIAGE, 0.5);
+  wallRun(m, 8, 2, 2, W_FOLIAGE, 0.5);
+  wallRun(m, 8, 10, 16, W_FOLIAGE, 0.5); // a gap in the hedge at x 3-9 — the gate
+  wallCol(m, 2, 1, 8, W_FOLIAGE, 0.5);
+  wallCol(m, 16, 1, 8, W_FOLIAGE, 0.5);
+  // North-east meadow — pasture with a shallow pond.
+  wallRun(m, 1, 19, 34, W_FOLIAGE, 0.5);
+  wallCol(m, 34, 1, 7, W_FOLIAGE, 0.5);
+  floorRect(m, 26, 3, 29, 5, F_WATER);
+  m.props.push(PROP_BUILDERS.tuft(22.5, 4.4));
+  m.props.push(PROP_BUILDERS.tuft(31.6, 5.8));
+  m.props.push(PROP_BUILDERS.tree(20.4, 3.6));
+  m.props.push(PROP_BUILDERS.tree(33.0, 6.9));
+  // The farmhouse — a timber box above the road, its barn beside.
+  for (let x = 18; x <= 21; x++) {
+    for (let y = 4; y <= 6; y++) m.walls[y * m.w + x] = W_TIMBER;
+  }
+  m.walls[6 * m.w + 19] = 4; // the farmhouse door
+  for (let x = 22; x <= 24; x++) {
+    for (let y = 4; y <= 5; y++) m.walls[y * m.w + x] = W_WOOD;
+  }
+  m.wallH[4 * m.w + 21] = 1.15;
+  // South pasture — hayricks and sheep-worn grass to the horizon.
+  for (const [hx, hy] of [[6, 13], [10, 15], [14, 13.6]]) {
+    m.props.push({
+      x: hx, y: hy, block: 0.3,
+      faces: prismFaces(hx, hy, 0.34, 8, 0.42, W_CANVAS),
+    });
+  }
+  m.props.push(PROP_BUILDERS.tuft(8.3, 16.2));
+  m.props.push(PROP_BUILDERS.tuft(17.7, 14.1));
+  m.props.push(PROP_BUILDERS.deadTree(30.5, 14.6));
+  // Hedgerow along the road's south edge, broken for field gates.
+  wallRun(m, 12, 2, 9, W_FOLIAGE, 0.45);
+  wallRun(m, 12, 12, 22, W_FOLIAGE, 0.45);
+  wallRun(m, 12, 27, 33, W_FOLIAGE, 0.45);
+  return m;
+}
+
+// The high pass — tall stone walls closing a winding track over the ridge.
+// Filmed both in daylight and at night.
+function mountainMap(): GameMap {
+  const m = introShell(40, 20, F_DIRT);
+  // The pass walls — the kink mid-run makes the road read as a switchback.
+  for (let x = 0; x < m.w; x++) {
+    const top = x < 19 ? 6 : 8;
+    const bot = x < 19 ? 13 : 15;
+    for (let y = 0; y <= top; y++) {
+      m.walls[y * m.w + x] = W_STONE;
+      m.wallH[y * m.w + x] = 2.3 + ((x * 7 + y * 3) % 3) * 0.3;
+    }
+    for (let y = bot; y < m.h; y++) {
+      m.walls[y * m.w + x] = W_STONE;
+      m.wallH[y * m.w + x] = 2.3 + ((x * 5 + y * 11) % 3) * 0.3;
+    }
+  }
+  // Scree and scrub — boulder prisms and the odd dead pine at the margins.
+  for (let i = 0; i < 8; i++) {
+    const px = 3 + i * 4.4;
+    const py = i % 2 ? 12.4 : 7.2;
+    m.props.push({
+      x: px, y: py, block: 0.22,
+      faces: prismFaces(px, py, 0.16 + (i % 3) * 0.05, 6, 0.2 + (i % 3) * 0.08, W_STONE, i * 0.6),
+    });
+  }
+  m.props.push(PROP_BUILDERS.deadTree(9.5, 7.6));
+  m.props.push(PROP_BUILDERS.deadTree(28.5, 13.8));
+  // A cairn at the crest — travellers' stones.
+  m.props.push(PROP_BUILDERS.grave(19.6, 8.2));
+  m.props.push(PROP_BUILDERS.grave(20.2, 8.6));
+  return m;
+}
+
+// A city's canyon — taller, tighter than the village: flagstone street,
+// mixed facades three storeys up, more lit windows. Daylight only.
+function cityMap(): GameMap {
+  const m = introShell(34, 14, F_FLAG);
+  for (let x = 1; x < 33; x++) {
+    const tex = x % 6 === 0 ? W_STONE : x % 4 === 0 ? W_BRICK : W_TIMBER;
+    const hh = 1.9 + ((x * 9) % 4) * 0.28;
+    wallRun(m, 5, x, x, x % 8 === 0 ? 4 : tex, hh);
+    wallRun(m, 10, x, x, x % 7 === 0 ? 4 : tex, hh * 0.9);
+    if ((x * 7 + 3) % 9 === 0) m.walls[5 * m.w + x] = W_LAMP;
+    if ((x * 5 + 4) % 10 === 0) m.walls[10 * m.w + x] = W_LAMP;
+  }
+  wallCol(m, 0, 0, m.h - 1, W_BRICK, 2.0);
+  wallCol(m, 33, 0, m.h - 1, W_STONE, 2.2);
+  m.props.push(PROP_BUILDERS.cart(12.4, 9.3));
+  m.props.push(PROP_BUILDERS.barrel(22.5, 6.6));
+  m.props.push(PROP_BUILDERS.sack(23.2, 6.6));
+  m.props.push(PROP_BUILDERS.lamp(17.5, 7.2));
+  m.lights.push({ x: 17.5, y: 7.2, radius: 5, intensity: 0.85, warm: 1, phase: 3.1 });
+  return m;
+}
+
+// The last countryside — a bare lane between hedgerows, fields running out
+// to open sky, a lone farmhouse far off. Emptier the closer you get.
+function countrysideMap(): GameMap {
+  const m = introShell(40, 18);
+  for (let x = 0; x < m.w; x++) {
+    m.floorTex[8 * m.w + x] = F_DIRT;
+    m.floorTex[9 * m.w + x] = F_DIRT;
+  }
+  // Hedgerows flanking the lane, broken by field gates.
+  wallRun(m, 6, 1, 8, W_FOLIAGE, 0.55);
+  wallRun(m, 6, 11, 22, W_FOLIAGE, 0.55);
+  wallRun(m, 6, 26, 36, W_FOLIAGE, 0.55);
+  wallRun(m, 11, 3, 14, W_FOLIAGE, 0.55);
+  wallRun(m, 11, 18, 30, W_FOLIAGE, 0.55);
+  wallRun(m, 11, 34, 38, W_FOLIAGE, 0.55);
+  // A pond south, in the meadow.
+  floorRect(m, 20, 13, 25, 15, F_WATER);
+  m.props.push(PROP_BUILDERS.tuft(19.2, 12.6));
+  m.props.push(PROP_BUILDERS.tuft(26.8, 15.6));
+  // Scattered trees, thinner as the road runs on.
+  m.props.push(PROP_BUILDERS.tree(5.5, 4.4));
+  m.props.push(PROP_BUILDERS.tree(13.8, 13.4));
+  m.props.push(PROP_BUILDERS.deadTree(24.4, 4.8));
+  m.props.push(PROP_BUILDERS.tree(33.5, 13.0));
+  // The last farmhouse — a dark box far north of the road.
+  for (let x = 30; x <= 32; x++) {
+    for (let y = 2; y <= 3; y++) m.walls[y * m.w + x] = W_TIMBER;
+  }
+  // An emptied cart left at the roadside — heading out, not in.
+  m.props.push(PROP_BUILDERS.cart(27.4, 9.6));
+  m.props.push(PROP_BUILDERS.grave(27.9, 10.4));
+  return m;
+}
+
+// The scenes the intro's shots film, keyed by Shot.scene.
+export function buildIntroMaps(): Record<string, GameMap> {
+  return {
+    woods: woodsMap(),
+    town: townMap(),
+    farmland: farmlandMap(),
+    mountain: mountainMap(),
+    city: cityMap(),
+    countryside: countrysideMap(),
+  };
 }
