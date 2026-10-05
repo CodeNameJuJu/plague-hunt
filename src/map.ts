@@ -146,6 +146,47 @@ function tableFaces(x: number, y: number, rot: number, w: number, d: number, h: 
   return faces;
 }
 
+// Stall geometry — shared by the plaza's stalls (stocked) and the
+// quarter's (stripped). The awning is two stepped bands so it reads as
+// canvas sloped back off the street, with a valance hanging at the lip.
+function stallFaces(x: number, y: number, rot: number, stocked: boolean): PropFace[] {
+  const [cx, cy] = rotOff(x, y, rot, 0, -0.24); // the boards, toward the customer
+  const faces: PropFace[] = [
+    ...boxFaces(cx, cy, 1.02, 0.3, 0.26, W_WOOD, rot),
+    topFace(cx, cy, 1.02, 0.3, 0.26, W_WOOD, rot),
+  ];
+  if (stocked) {
+    // Goods heaped on the boards — the stall's spot picks its wares:
+    // produce, sacked grain or stacked crates.
+    const mix = Math.abs(Math.floor(x * 13 + y * 7)) % 3;
+    const heapTex = mix === 0 ? W_FOLIAGE : mix === 1 ? W_CANVAS : W_TIMBER;
+    const [g1x, g1y] = rotOff(x, y, rot, -0.28, -0.24);
+    const [g2x, g2y] = rotOff(x, y, rot, 0.12, -0.26);
+    const [g3x, g3y] = rotOff(x, y, rot, 0.36, -0.2);
+    faces.push(
+      ...prismFaces(g1x, g1y, 0.13, 6, 0.11, heapTex, 0, 0.26),
+      ...boxFaces(g2x, g2y, 0.22, 0.17, 0.09, mix === 2 ? W_WOOD : heapTex, rot, 0.26),
+      ...prismFaces(g3x, g3y, 0.09, 6, 0.07, mix === 0 ? W_CANVAS : W_FOLIAGE, 0, 0.26)
+    );
+  }
+  // Four poles — the front pair lower, so the canvas slopes off the street.
+  // The awning rides well above eye height so it reads as shelter, not ceiling.
+  for (const [px, py, ph] of [[-0.48, -0.44, 0.74], [0.48, -0.44, 0.74], [-0.48, 0.36, 0.9], [0.48, 0.36, 0.9]] as const) {
+    const [ox, oy] = rotOff(x, y, rot, px, py);
+    faces.push(...boxFaces(ox, oy, 0.05, 0.05, ph, W_WOOD, rot));
+  }
+  const [t1x, t1y] = rotOff(x, y, rot, 0, -0.28);
+  const [t2x, t2y] = rotOff(x, y, rot, 0, 0.2);
+  faces.push(
+    ...boxFaces(t1x, t1y, 1.14, 0.5, 0.05, W_CANVAS, rot, stocked ? 0.72 : 0.66), // front band
+    ...boxFaces(t2x, t2y, 1.14, 0.56, 0.05, W_CANVAS, rot, stocked ? 0.84 : 0.74) // back band — sags when stripped
+  );
+  // The valance — a hanging strip at the awning's front lip.
+  const [vx, vy] = rotOff(x, y, rot, 0, -0.5);
+  faces.push(...boxFaces(vx, vy, 1.14, 0.04, 0.11, W_CANVAS, rot, 0.62));
+  return faces;
+}
+
 // kind → geometry. The well is a hollow octagonal drum (you can see over the
 // rim into its dark throat), a post-and-lintel frame, and a crossed gable
 // roof. Carts get a bed, wheel slabs and shafts; graves are leaning slabs.
@@ -265,6 +306,12 @@ const PROP_BUILDERS: Record<string, (x: number, y: number, rot?: number) => Prop
     x, y, block: 0,
     faces: boxFaces(x, y, 0.28, 0.28, 0.12, W_FOLIAGE, ((x * 31 + y * 17) % 10) / 20),
   }),
+  // A market stall — boards on trestles, goods heaped, canvas stretched
+  // over poles overhead. rot fronts the counter toward the customer (0
+  // faces -y); the seller works the other side. `deadStall` is the same
+  // bones stripped bare — the quarter's stalls stand empty.
+  stall: (x, y, rot = 0) => ({ x, y, block: 0.46, faces: stallFaces(x, y, rot, true) }),
+  deadStall: (x, y, rot = 0) => ({ x, y, block: 0.46, faces: stallFaces(x, y, rot, false) }),
   // A lantern post — a wood upright carrying a glass-paned lantern head,
   // for open ground where a sconce has no wall to hang on.
   lamp: (x, y) => ({
@@ -552,11 +599,16 @@ const WATER_ROW_Y = 77;
 // restock each dawn.
 
 const SPRITES: SpriteDef[] = [
-  // The plaza
+  // The plaza — the well ringed by market stalls; canvas and goods on every
+  // side, vendors behind the boards while the sun is up.
   { kind: "well", x: 31.5, y: 21.7 },
   { kind: "brazier", x: 29.7, y: 23.4 },
   { kind: "brazier", x: 33.4, y: 19.7 },
   { kind: "cart", x: 24.5, y: 21.6, search: "cart_timber", examine: "the cart's bed" },
+  { kind: "stall", x: 30.3, y: 20.05, rot: 3.1416 },  // the herbwife's — fronts south at the well
+  { kind: "stall", x: 30.7, y: 23.72 },              // the clothier's — fronts north
+  { kind: "stall", x: 32.4, y: 23.78 },              // mother anette's rags
+  { kind: "stall", x: 33.9, y: 23.5, rot: -1.5708 }, // the costermonger — fronts west at the well
 
   // Street flames — sparse; nights stay dark between them
   { kind: "torch", x: 5.5, y: 21.4 },
@@ -570,7 +622,7 @@ const SPRITES: SpriteDef[] = [
   { kind: "torch", x: 15.5, y: 14.5 },
   { kind: "torch", x: 45.5, y: 28.5 },
   { kind: "cart", x: 45.6, y: 15.5, search: "cart_timber", examine: "the cart's bed" },
-  { kind: "cart", x: 10.5, y: 34.6, search: "cart_timber", examine: "the cart's bed" },
+  { kind: "cart", x: 49.5, y: 37.3, search: "cart_timber", examine: "the burial cart" },
 
   // By the gate — the provost's fire, and the corpse cart waiting to go east
   { kind: "brazier", x: 59.5, y: 22.6 },
@@ -589,12 +641,12 @@ const SPRITES: SpriteDef[] = [
   { kind: "tree", x: 53.5, y: 28.5 },
   { kind: "tree", x: 76.5, y: 9.5 },   // the camp's old park — still alive
   { kind: "tree", x: 83.5, y: 8.7 },   // where the dead trees stand
-  { kind: "planter", x: 3.35, y: 9.28 },  // the bakery's threshold
-  { kind: "planter", x: 5.65, y: 9.28 },
-  { kind: "planter", x: 19.35, y: 9.28 }, // the inn's threshold
-  { kind: "planter", x: 21.65, y: 9.28 },
-  { kind: "planter", x: 33.35, y: 9.28 }, // the apothecary's threshold
-  { kind: "planter", x: 35.65, y: 9.28 },
+  { kind: "planter", x: 3.35, y: 9.06 },  // the bakery's threshold — tucked to the facade
+  { kind: "planter", x: 5.65, y: 9.06 },
+  { kind: "planter", x: 19.35, y: 9.06 }, // the inn's threshold
+  { kind: "planter", x: 21.65, y: 9.06 },
+  { kind: "planter", x: 33.35, y: 9.06 }, // the apothecary's threshold
+  { kind: "planter", x: 35.65, y: 9.06 },
   { kind: "planter", x: 54.3, y: 34.72 }, // the church porch
   { kind: "planter", x: 57.0, y: 34.8 },
   { kind: "tuft", x: 49.8, y: 36.9 },  // the graveyard gone to weed
@@ -691,11 +743,15 @@ const SPRITES: SpriteDef[] = [
   { kind: "deadTree", x: 51.2, y: 40.5 },
 
   // The quarantine quarter — quieter, meaner, watched.
-  // Gate street — a brazier by the cordon, bodies' cart by the pesthouse
+  // Gate street — a brazier by the cordon, bodies' cart by the pesthouse.
+  // The market that was: stalls stand stripped and sagging along the street
+  // where the quarter used to trade — nobody left to sell to.
   { kind: "brazier", x: 63.5, y: 21.6 },
   { kind: "torch", x: 74.5, y: 21.4 },
   { kind: "torch", x: 86.5, y: 22.6 },
   { kind: "cart", x: 66.5, y: 22.6, search: "cart_timber", examine: "the bodies' cart" },
+  { kind: "deadStall", x: 70.5, y: 22.5 },
+  { kind: "deadStall", x: 82.5, y: 22.4 },
   // The marquee — cots under canvas, the slab, Marguerite's vigil
   { kind: "bed", x: 65.6, y: 13.5, rot: 1.5708 },
   { kind: "bed", x: 69.5, y: 13.5, rot: 1.5708 },
@@ -1185,6 +1241,11 @@ export function villagerSpots(): { homes: Spot[]; haunts: Spot[]; tavern: Spot }
   const haunts: Spot[] = [
     { x: 30.6, y: 21.9 }, // drawing water at the well
     { x: 32.6, y: 22.6 }, // crossing the plaza
+    // The market — browsing the stall fronts is half the city's day.
+    { x: 30.3, y: 21.1 },  // haggling at the herb stall
+    { x: 30.7, y: 22.8 },  // fingering cloth
+    { x: 32.4, y: 23.0 },  // the rags stall
+    { x: 33.25, y: 22.7 }, // the costermonger's boards
   ];
   let tavern: Spot = { x: 20.5, y: 9.5 }; // the inn's door, if the list moves
   for (const b of BUILDINGS) {

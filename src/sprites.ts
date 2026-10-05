@@ -573,6 +573,9 @@ const DRESSES: Dress[] = [
   { robe: [46, 44, 48], skin: [160, 124, 94], hose: [36, 32, 32], shoe: [24, 22, 20], hunch: 0.3, ragged: true, arms: "folded" },
   // carter — oxblood coat, hood down, whip trailing
   { robe: [84, 42, 36], skin: [170, 130, 96], hose: [42, 36, 30], shoe: [30, 26, 22], belt: [48, 34, 22], patches: true },
+  // patrolman — the provost's blue-grey, kettle helm, lantern swinging.
+  // Crowd villagers never wear this one (see villagerVariants).
+  { robe: [62, 76, 96], skin: [168, 130, 96], hose: [40, 44, 50], shoe: [30, 26, 22], belt: [46, 36, 24] },
 ];
 
 function villagerRig(r: Ras, phase: number, variant: number): void {
@@ -804,6 +807,38 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
       r.ellipse(fx + 6, shoulderY - 2 + bob, 3.5, 3, R * 0.6, G * 0.6, B * 0.6);
       r.rect(fx - 2.5, headY + 3, fx + 2.5, headY + 5, skin[0] * 0.66, skin[1] * 0.62, skin[2] * 0.6); // stubble
       r.line(handBX, handY + 1, 46 + st * 2, 58 + bob, 0.8, 40, 30, 20); // the whip
+      break;
+    }
+    case 8: {
+      // Patrolman — kettle helm and mail coif over the face, brass badge,
+      // the halberd shouldered, and the lantern swinging with his stride.
+      // Mail first, then the face set into its opening.
+      r.ellipse(fx, headY + 3, 6, 6.5, 96, 100, 108);
+      r.rect(fx - 5, headY + 5, fx + 5, headY + 10, 96, 100, 108);
+      r.rect(fx - 2.6, headY + 5, fx + 2.6, headY + 9.5, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
+      r.px(fx - 1.6, headY + 7, 26, 20, 16);
+      r.px(fx + 1.6, headY + 7, 26, 20, 16);
+      // Kettle helm — wide brim, domed crown, ridged.
+      r.ellipse(fx, headY - 3, 9.5, 3, 104, 108, 116);
+      r.ellipse(fx, headY - 5.5, 5.5, 4.5, 116, 120, 128);
+      r.px(fx, headY - 9, 140, 144, 152);
+      // Brass badge on the tabard.
+      r.ellipse(32 + sway * 0.5, 36 + bob, 2.4, 2.8, 190, 160, 80);
+      r.px(32 + sway * 0.5, 36 + bob, 230, 200, 120);
+      // Halberd sloped back over the shoulder.
+      r.line(handBX, handY + bob, 34 - st * 2, 7 + bob, 1.6, 90, 64, 36); // shaft
+      r.rect(32.5 - st * 2, 4 + bob, 36.5 - st * 2, 10 + bob, 170, 174, 182); // axe head
+      r.line(34.5 - st * 2, 0.5 + bob, 34.5 - st * 2, 4 + bob, 1.6, 185, 189, 197); // spike
+      // The lantern — dangling from the swinging hand, always lit. By day
+      // it reads as glass and brass; at night its own light pool catches it.
+      const lx = handAX - 1 + st * 1.2;
+      const ly = handY + 7 + Math.abs(st) * 0.8;
+      r.line(handAX, handY + bob, lx, ly - 3.5, 0.7, 40, 38, 44); // the cord
+      r.rect(lx - 2.6, ly - 3, lx + 2.6, ly + 3, 44, 42, 48); // the cage
+      r.rect(lx - 1.6, ly - 2, lx + 1.6, ly + 2, 240, 190, 100); // the panes
+      r.px(lx, ly - 0.5, 255, 224, 150);
+      r.line(lx - 2.6, ly - 3, lx - 2.6, ly + 3, 0.5, 30, 28, 34); // cage bars
+      r.line(lx + 2.6, ly - 3, lx + 2.6, ly + 3, 0.5, 30, 28, 34);
       break;
     }
   }
@@ -1294,6 +1329,87 @@ function hoodedFrame(p: number): SpriteTex {
   });
 }
 
+// The herbwife — moss robes and a grey-green kerchief, a darker apron, a
+// bunch of rue held up where the customer can see it.
+const HERBWIFE: Dress = { robe: [58, 70, 46], skin: [172, 136, 98], hose: [44, 40, 34], shoe: [30, 26, 20], belt: [50, 40, 26], arms: "heldR" };
+function herbwifeFrame(p: number): SpriteTex {
+  return standFrame(p, HERBWIFE, (r, _p, fx, headY, _sy, hemY) => {
+    const bob = Math.sin(p * Math.PI * 2) * 0.3;
+    // Apron panel — darker moss, stained low.
+    r.poly([[27, 34 + bob], [37, 34 + bob], [38, hemY - 1], [26, hemY - 1]], 62, 58, 40);
+    r.rect(26, hemY - 4 + bob, 38, hemY - 1 + bob, 50, 46, 32);
+    // The bunch of rue — sprigs fanned out of the raised fist.
+    r.line(41.5, 31.5 + bob, 38, 23.5 + bob, 1, 84, 110, 52);
+    r.line(41.5, 31.5 + bob, 42, 22.5 + bob, 1, 92, 120, 58);
+    r.line(41.5, 31.5 + bob, 46, 24.5 + bob, 1, 84, 110, 52);
+    r.px(38, 23 + bob, 100, 132, 64);
+    r.px(42, 22 + bob, 110, 142, 70);
+    r.px(46, 24 + bob, 100, 132, 64);
+    // Kerchief over the hair, knotted at the side.
+    r.ellipse(fx, headY - 3.5, 7.2, 4.8, 84, 94, 70);
+    r.px(fx + 7, headY - 4, 84, 94, 70);
+    r.px(fx + 8, headY - 1, 76, 86, 62);
+  });
+}
+
+// The clothier — madder-red robe, a merchant's flat cap, a length of pale
+// linen draped over his arm so it hangs in two falls.
+const CLOTHIER: Dress = { robe: [88, 44, 42], skin: [174, 134, 98], hose: [44, 38, 34], shoe: [30, 26, 22], belt: [56, 40, 26] };
+function clothierFrame(p: number): SpriteTex {
+  return standFrame(p, CLOTHIER, (r, _p, fx, headY) => {
+    const bob = Math.sin(p * Math.PI * 2) * 0.3;
+    // The sample cloth over the left forearm — the stall's whole pitch.
+    r.poly([[23, 36 + bob], [29, 36 + bob], [30, 50 + bob], [24, 51 + bob]], 190, 182, 158);
+    r.line(26.5, 37 + bob, 27.5, 50 + bob, 0.7, 150, 142, 120); // the fold's shadow
+    // Merchant's cap — soft, flat, tilted.
+    r.rect(fx - 6.5, headY - 6, fx + 6.5, headY - 2.5, 52, 40, 34);
+    r.rect(fx - 7.5, headY - 2.5, fx + 7.5, headY - 1.5, 42, 32, 26); // the brim
+    // A purse at the belt — he's doing business.
+    r.ellipse(37.5, 46 + bob, 2.4, 2.8, 60, 44, 28);
+  });
+}
+
+// The costermonger — brown robe under a leather apron, flat cap, a tray of
+// round loaves held out before him.
+const MONGER: Dress = { robe: [78, 60, 40], skin: [176, 138, 100], hose: [46, 40, 32], shoe: [32, 26, 20], arms: "folded" };
+function mongerFrame(p: number): SpriteTex {
+  return standFrame(p, MONGER, (r, _p, fx, headY, _sy, hemY) => {
+    const bob = Math.sin(p * Math.PI * 2) * 0.3;
+    // Leather apron — a darker bib over the robe.
+    r.poly([[27.5, 33 + bob], [36.5, 33 + bob], [38.5, hemY - 2], [25.5, hemY - 2]], 74, 52, 34);
+    // Flat cap, a little crushed.
+    r.rect(fx - 6.5, headY - 5.5, fx + 6.5, headY - 2, 52, 40, 30);
+    r.rect(fx - 7.5, headY - 2, fx + 7.5, headY - 1, 42, 32, 24);
+    // The tray held before him — three loaves in a wicker flat.
+    r.ellipse(32, 45.5 + bob, 8.5, 3, 110, 80, 48);
+    r.ellipse(28.5, 44.8 + bob, 2.6, 1.8, 168, 124, 72);
+    r.ellipse(33, 44.4 + bob, 2.6, 1.8, 178, 134, 80);
+    r.ellipse(36.5, 45 + bob, 2.6, 1.8, 160, 118, 68);
+  });
+}
+
+// Mother Anette — the rag-and-bone woman, faded mauve under a patched
+// shawl, grey bun pinned at the back. No shop; she sells gossip.
+const ANETTE: Dress = { robe: [72, 60, 64], skin: [168, 130, 96], hose: [46, 42, 40], shoe: [30, 26, 22], patches: true, arms: "folded" };
+function anetteFrame(p: number): SpriteTex {
+  return standFrame(p, ANETTE, (r, _p, fx, headY, shoulderY) => {
+    const bob = Math.sin(p * Math.PI * 2) * 0.3;
+    // The shawl — a darker fall of cloth over the shoulders.
+    r.poly(
+      [
+        [24 + 0.3, shoulderY + 1],
+        [40 + 0.3, shoulderY + 1],
+        [43.5, 46 + bob],
+        [20.5, 46 + bob],
+      ],
+      58, 50, 56
+    );
+    // Grey hair — thin crown, a bun at the back.
+    r.ellipse(fx, headY - 4.5, 6.2, 3.4, 158, 152, 144);
+    r.ellipse(fx - 5.4, headY - 1.5, 2.6, 2.4, 150, 146, 140); // the bun
+  });
+}
+
 // A shrouded corpse laid out for autopsy on a stone slab.
 function corpseSprite(): SpriteTex {
   const s = makeSprite();
@@ -1553,6 +1669,13 @@ export function buildSpriteKinds(): Record<string, SpriteKind> {
     alchemist: { frames: IDLE_PHASES.map((p) => alchemistFrame(p)), scale: 0.9, block: 0.18, animFps: 0.6 },
     patient: { frames: IDLE_PHASES.map((p) => patientFrame(p)), scale: 0.85, block: 0.16, animFps: 0.6 },
     hooded: { frames: IDLE_PHASES.map((p) => hoodedFrame(p)), scale: 0.92, block: 0, animFps: 0.6 },
+    // The market — vendors at their boards while the sun is up.
+    herbwife: { frames: IDLE_PHASES.map((p) => herbwifeFrame(p)), scale: 0.9, block: 0.18, animFps: 0.6 },
+    clothier: { frames: IDLE_PHASES.map((p) => clothierFrame(p)), scale: 0.9, block: 0.18, animFps: 0.6 },
+    monger: { frames: IDLE_PHASES.map((p) => mongerFrame(p)), scale: 0.9, block: 0.18, animFps: 0.6 },
+    anette: { frames: IDLE_PHASES.map((p) => anetteFrame(p)), scale: 0.9, block: 0.18, animFps: 0.6 },
+    // The watch — a walking man-at-arms, lantern swinging on the stride.
+    patrol: { frames: WALK_PHASES.map((p) => villagerFrame(p, 8)), scale: 0.92, block: 0.18, animFps: 2.6 },
     letter: { frames: [letterSprite()], scale: 0.3, block: 0, animFps: 0 },
     grate: { frames: [grateSprite()], scale: 0.4, block: 0, animFps: 0 },
     // bed, homebed, table and desk are props now — real furniture, not billboards
@@ -1578,9 +1701,10 @@ export function buildSpriteKinds(): Record<string, SpriteKind> {
 }
 
 // All villager dressings — a walk-cycle pair per variant. npcs.ts assigns
-// each wanderer one of these at spawn.
+// each wanderer one of these at spawn. The patrolman dressing (index 8) is
+// a guard's kit, not a citizen's — the crowd never draws it.
 export function villagerVariants(): SpriteTex[][] {
-  return DRESSES.map((_, v) => WALK_PHASES.map((p) => villagerFrame(p, v)));
+  return DRESSES.slice(0, 8).map((_, v) => WALK_PHASES.map((p) => villagerFrame(p, v)));
 }
 
 export function buildLantern(): SpriteTex {

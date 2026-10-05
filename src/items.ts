@@ -41,6 +41,20 @@ export const SHOPS: Record<string, ShopWare[]> = {
     { item: "cloth", price: 2 },
     { item: "skin", price: 3 },
   ],
+  // The market stalls — daylight hours only, the sellers pack up at dusk.
+  herb: [
+    { item: "rue", price: 5 },
+    { item: "leeches", price: 6 },
+    { item: "bandage", price: 5 },
+  ],
+  cloth: [
+    { item: "cloth", price: 2 },
+    { item: "bandage", price: 5 },
+  ],
+  monger: [
+    { item: "bread", price: 4 },
+    { item: "skin", price: 3 },
+  ],
 };
 
 // The provost pays the doctor's stipend — collected at the gate, once a day.

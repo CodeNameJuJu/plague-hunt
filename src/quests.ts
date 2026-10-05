@@ -98,6 +98,13 @@ export const QUEST_NPCS: QuestNPC[] = [
   { id: "patient1", name: "the mason", sprite: "patient", x: 65.6, y: 14.6 },
   { id: "patient2", name: "the wheelwright", sprite: "patient", x: 69.5, y: 14.6 },
   { id: "patient3", name: "the candlemaker", sprite: "patient", x: 69.6, y: 16.7 },
+  // The market — vendors behind the plaza's stalls while the sun is up.
+  // At dusk they pack the boards and go home; the positions updateMarket
+  // moves them to are inside shuttered houses, out of the streets' reach.
+  { id: "herbwife", name: "the herbwife", sprite: "herbwife", x: 30.3, y: 19.3 },
+  { id: "clothier", name: "the clothier", sprite: "clothier", x: 30.7, y: 24.47 },
+  { id: "anette", name: "mother anette", sprite: "anette", x: 32.4, y: 24.53 },
+  { id: "monger", name: "the costermonger", sprite: "monger", x: 34.62, y: 23.5 },
 ];
 
 export function initQuest(): QuestState {
@@ -279,6 +286,10 @@ export function talk(q: QuestState, npc: QuestNPC, inv: Inventory, day: number):
     case "digger": talkDigger(q, day); break;
     case "widow": talkWidow(q, inv); break;
     case "alchemist": talkAlchemist(q, day); break;
+    case "herbwife": talkKeeper(q, "the herbwife", "herb"); break;
+    case "clothier": talkKeeper(q, "the clothier", "cloth"); break;
+    case "monger": talkKeeper(q, "the costermonger", "monger"); break;
+    case "anette": talkAnette(q); break;
     default: talkPatient(q, npc, inv, day);
   }
   const topics = topicsFor(npc.id, q);
@@ -329,9 +340,31 @@ function talkKeeper(q: QuestState, name: string, shop: string): void {
       "Buy what you need, doctor. Somebody has to feed this city.",
     ],
     aubert: ["Remedies and linen, doctor. Take what the work calls for."],
+    // The market stalls — cheaper than the shops, but only while the sun's up.
+    herb: [
+      "Rue for the smoke-fires, leeches for the barber's bowl, bandages for whatever the quarter sends you home with.",
+      "The graveyard grows rue free, mind — I'd be a poor tradeswoman if I didn't say it. But you'll dig it yourself, over the graves.",
+    ],
+    cloth: [
+      "Clean linen, twice-boiled — bandage-weight, doctor. Aubert boils his the same and charges you for the privilege.",
+    ],
+    monger: [
+      "Bread's fresher than Colin's queue and the skins don't leak. Four sous the loaf, three the skin — market prices, no fuss.",
+    ],
   };
   open(q, name, hello[shop]);
   q.shop = shop;
+}
+
+// Mother Anette — no counter, just the rags stall and everything the quarter
+// whispers about. Her gossip is free; some of it is even true.
+function talkAnette(q: QuestState): void {
+  open(q, "mother anette", [
+    "Sit a moment, doctor — the boards don't mind. Everyone comes past Anette's sooner or later.",
+    "East side? Sealed like a coffin, dear. They say the sick wail at the pesthouse till the sisters dose them quiet. My own boy was in there when the stakes went up — they'll not let me to him.",
+    "The watch walks all night now, lanterns and all. They keep the cordon, not the peace — a body can be robbed blind two streets over and the patrols won't look twice.",
+    "You watch that plaza well, doctor. The fouling on its rope isn't God's work — someone hauled that bucket up heavy and in a hurry.",
+  ]);
 }
 
 function talkNun(q: QuestState, day: number): void {

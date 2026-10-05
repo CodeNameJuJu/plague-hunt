@@ -25,7 +25,17 @@ import { initJournal } from "./journal";
 import { initShop } from "./shop";
 import { buildIntroMaps, buildMap, isBlocked, openGate, updateDoors } from "./map";
 import { makeNeeds, updateNeeds } from "./needs";
-import { makeVillagers, updateVillagers, villagerSprites } from "./npcs";
+import {
+  makeVillagers,
+  updateVillagers,
+  villagerSprites,
+  makePatrols,
+  updatePatrols,
+  patrolSprites,
+  patrolLanterns,
+  makeMarket,
+  updateMarket,
+} from "./npcs";
 import { makePlayer, updatePlayer } from "./player";
 import {
   AUTOPSY_FINDINGS,
@@ -101,6 +111,10 @@ for (const n of QUEST_NPCS) {
 }
 const quest = { npcs: QUEST_NPCS, state: initQuest() };
 const villagers = makeVillagers(map);
+// The watch and the market — patrols beat their rounds day and night;
+// vendors hold the plaza stalls while the sun is up.
+const patrols = makePatrols();
+const market = makeMarket(quest.npcs, sprites);
 // Icons for the hotbar and pack — every item's sprite bitmap, keyed by name,
 // plus the sous piece for the purse slot.
 const icons = Object.fromEntries(
@@ -349,6 +363,7 @@ function frame(now: number): void {
     updateDoors(map, dt, player.x, player.y);
     updateNeeds(needs, dt, player.running);
     updateVillagers(villagers, dt, daylight, tday, map, player);
+    updatePatrols(patrols, dt);
 
     // The provost's decree made real — the gate opens once, and stays open.
     if (quest.state.gateOpen && !gateOpened) {
@@ -522,6 +537,7 @@ function frame(now: number): void {
   if (isIntroActive()) {
     updateIntro(dt, player);
     updateVillagers(villagers, dt, 0, tday, map, player);
+    updatePatrols(patrols, dt);
   }
 
   // The menu's living title backdrop — while the title card is up the camera
@@ -533,6 +549,7 @@ function frame(now: number): void {
     }
     updateAttract(dt, player);
     updateVillagers(villagers, dt, 0, tday, map, player);
+    updatePatrols(patrols, dt);
   } else if (menuPose) {
     player.x = menuPose.x;
     player.y = menuPose.y;
@@ -548,6 +565,10 @@ function frame(now: number): void {
   const ambient = AMBIENT_NIGHT + (AMBIENT_DAY - AMBIENT_NIGHT) * daylight;
   const fogNear = FOG_NIGHT_NEAR + (FOG_DAY_NEAR - FOG_NIGHT_NEAR) * daylight;
   const fogFar = FOG_NIGHT_FAR + (FOG_DAY_FAR - FOG_NIGHT_FAR) * daylight;
+
+  // The market keeps sun hours — vendors pack the boards at dusk (and the
+  // night backdrop leaves them home).
+  updateMarket(market, daylight);
 
   // The lantern light trails the player's facing slightly, like it's swinging.
   // It dies when the lantern is stowed — darkness is the price of stealth.
@@ -582,11 +603,18 @@ function frame(now: number): void {
   // The lantern is the only light that follows you between them.
   const roadScene = introScene();
   const sceneMap = roadScene ? introMaps[roadScene] : map;
-  const sceneLights = roadScene ? introSceneLights[roadScene] : lights;
+  // At night the watch's lanterns join the lamp list — pools of firelight
+  // moving down the dark streets with the patrols.
+  const sceneLights = roadScene
+    ? introSceneLights[roadScene]
+    : daylight < 0.35
+      ? lights.concat(patrolLanterns(patrols))
+      : lights;
   const allSprites = roadScene
     ? []
     : sprites.concat(
         villagerSprites(villagers, villagerFrames, spriteKinds.villager.scale),
+        patrolSprites(patrols, spriteKinds.patrol.frames, spriteKinds.patrol.scale),
         isIntroActive() ? introShamblerSprites(spriteKinds.shambler.frames, spriteKinds.shambler.scale) : [],
         menuUp ? attractShamblerSprites(spriteKinds.shambler.frames, spriteKinds.shambler.scale) : [],
         extras

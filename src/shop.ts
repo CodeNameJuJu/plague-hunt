@@ -11,6 +11,9 @@ const SHOP_NAMES: Record<string, string> = {
   baker: "baker colin's stall",
   innkeep: "the inn — mistress hélène",
   aubert: "maître aubert's counter",
+  herb: "the herbwife's stall",
+  cloth: "the clothier's stall",
+  monger: "the costermonger's boards",
 };
 
 export interface ShopPanel {
