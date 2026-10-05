@@ -572,14 +572,17 @@ function frame(now: number): void {
 
   // The lantern light trails the player's facing slightly, like it's swinging.
   // It dies when the lantern is stowed — darkness is the price of stealth.
-  // Intro and title shots keep a faint ambient glow so they stay readable;
-  // by day it barely registers, by night it carries the frame.
+  // Intro night shots carry it lit — the card says the escort's lantern —
+  // while day shots keep only a faint glow so they stay readable.
   const dayScene = iLight && iLight.day > 0.4;
-  playerLight.intensity = isIntroActive() || menuUp
-    ? PLAYER_LIGHT_INTENSITY * (dayScene ? 0.25 : 0.6)
-    : lanternOut
-      ? PLAYER_LIGHT_INTENSITY
-      : 0;
+  const introNight = iLight ? iLight.day < 0.4 : daylight < 0.4;
+  playerLight.intensity = isIntroActive()
+    ? PLAYER_LIGHT_INTENSITY * (dayScene ? 0.25 : 1)
+    : menuUp
+      ? PLAYER_LIGHT_INTENSITY * 0.6
+      : lanternOut
+        ? PLAYER_LIGHT_INTENSITY
+        : 0;
   const sway = Math.sin(player.bobPhase) * 0.05;
   playerLight.x = player.x + Math.cos(player.angle) * 0.4 - Math.sin(player.angle) * sway;
   playerLight.y = player.y + Math.sin(player.angle) * 0.4 + Math.cos(player.angle) * sway;
@@ -621,11 +624,17 @@ function frame(now: number): void {
       );
   renderer.render(sceneMap, textures, allSprites, sceneLights, player, time, ambient, daylight, menuUp ? 0.8 : iLight ? iLight.sunT : tday, fogNear, fogFar);
 
-  // The lantern in the left hand — hidden in cutscene/menus.
-  if (isLocked() && !dead) {
-    const swayX = Math.sin(player.bobPhase * 0.5) * 4.5;
-    const swayY = Math.abs(Math.sin(player.bobPhase)) * 3.75;
-    renderer.drawViewmodels(lanternOut ? lanternCanvas : null, swayX, swayY);
+  // The lantern in the left hand — hidden in menus, but out for the intro's
+  // night shots: the escort walks you in by its light (the pointer isn't
+  // locked until the intro hands off, so the gate opens for it too). The
+  // intro drives player.bob rather than bobPhase, so its sway runs off the clock.
+  const introLantern = isIntroActive() && introNight;
+  if ((isLocked() && !dead) || introLantern) {
+    const lanternShown = lanternOut || introLantern;
+    const ph = isIntroActive() ? time * 7.2 : player.bobPhase;
+    const swayX = Math.sin(ph * 0.5) * 4.5;
+    const swayY = Math.abs(Math.sin(ph)) * 3.75;
+    renderer.drawViewmodels(lanternShown ? lanternCanvas : null, swayX, swayY);
   }
 
   // Upscale the framebuffer to fill the window, preserving aspect ratio.

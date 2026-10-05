@@ -27,8 +27,8 @@ export const AMBIENT_DAY = 0.62; // a brighter day — grey skies but the sun ge
 export const INDOOR_AMBIENT = 0.55; // daylight spills well inside
 export const HEARTH_GLOW = 0.22; // indoor ambient floor — houses stay lit at night
 export const HEARTH_WARM = 0.62; // the indoor glow reads as warm firelight
-export const PLAYER_LIGHT_RADIUS = 4.6;
-export const PLAYER_LIGHT_INTENSITY = 0.5;
+export const PLAYER_LIGHT_RADIUS = 7.5;
+export const PLAYER_LIGHT_INTENSITY = 0.95;
 
 // Fog: distances in tiles beyond which the world fades to black.
 // Night closes in tight; day lets you see down a street.

@@ -294,8 +294,8 @@ export function patrolLanterns(state: PatrolState): LightDef[] {
   return state.pos.map((p, i) => ({
     x: p.x,
     y: p.y,
-    radius: 4.2,
-    intensity: 0.8,
+    radius: 6.0,
+    intensity: 1.0,
     warm: 1,
     phase: i * 1.618,
   }));
