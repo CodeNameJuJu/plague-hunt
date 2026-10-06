@@ -10,7 +10,7 @@ import type { QuestNPC } from "./quests";
 // nobody simply vanishes in the street any more. They are the inversion of
 // the shamblers: day means life, night means the dead.
 
-const VILLAGER_MAX = 22;
+const VILLAGER_MAX = 34;
 const VILLAGER_RADIUS = 0.24;
 const SPAWN_INTERVAL = 0.85;
 
@@ -33,6 +33,7 @@ export interface VillagerState {
   cells: number[]; // open street cell indices — strolling ground
   homes: Spot[]; // every house's front step on the free side
   haunts: Spot[]; // the well, the plaza, the named stoops
+  market: Spot[]; // the stall fronts — where the crowd spends the day
   tavern: Spot; // the inn's door — where the evening leads
   spawnTimer: number;
   rand: () => number;
@@ -49,13 +50,14 @@ function mulberry(seed: number): () => number {
 }
 
 export function makeVillagers(map: GameMap): VillagerState {
-  const { homes, haunts, tavern } = villagerSpots();
+  const { homes, haunts, tavern, market } = villagerSpots();
   return {
     list: [],
     cells: streetCells(map),
     homes,
     haunts,
     tavern,
+    market,
     spawnTimer: 0,
     rand: mulberry(Math.floor(Math.random() * 1e9) + 7),
   };
@@ -66,11 +68,15 @@ function cellCenter(cells: number[], i: number, w: number): Spot {
   return { x: (c % w) + 0.5, y: Math.floor(c / w) + 0.5 };
 }
 
-// Where a day's errand leads: the evening draws folk to the tavern, the rest
-// of the day splits between the named stoops and plain strolling.
+// Where a day's errand leads: market hours pull most folk to the stalls,
+// the evening draws them to the tavern, and the rest splits between the
+// named stoops and plain strolling.
 function pickErrand(state: VillagerState, tday: number, w: number): Spot {
   const r = state.rand();
-  if (tday > 0.34 && tday < 0.52 && r < 0.45) return state.tavern;
+  if (tday > 0.34 && tday < 0.52 && r < 0.35) return state.tavern;
+  if (tday > 0.22 && tday < 0.64 && r < 0.68) {
+    return state.market[Math.floor(state.rand() * state.market.length)];
+  }
   if (r < 0.55) return state.haunts[Math.floor(state.rand() * state.haunts.length)];
   return cellCenter(state.cells, Math.floor(state.rand() * state.cells.length), w);
 }

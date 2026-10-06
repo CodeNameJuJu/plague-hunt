@@ -611,6 +611,16 @@ const SPRITES: SpriteDef[] = [
   { kind: "stall", x: 30.7, y: 23.72 },              // the clothier's — fronts north
   { kind: "stall", x: 32.4, y: 23.78 },              // mother anette's rags
   { kind: "stall", x: 33.9, y: 23.5, rot: -1.5708 }, // the costermonger — fronts west at the well
+  // The whole square trades — stalls ring the plaza's aprons and edges, and
+  // one more holds the square's heart beside the well. The south lane stays
+  // clear for the watch's beat.
+  { kind: "stall", x: 33.9, y: 19.4, rot: -1.5708 },  // the north-east nook — fronts west
+  { kind: "stall", x: 29.55, y: 20.7, rot: 1.5708 },  // west edge — fronts east
+  { kind: "stall", x: 29.55, y: 21.75, rot: 1.5708 }, // west edge, south end
+  { kind: "stall", x: 34.05, y: 21.65, rot: -1.5708 },// east edge — fronts west
+  { kind: "stall", x: 32.6, y: 21.3, rot: -1.5708 },  // the inner row, east of the well
+  { kind: "stall", x: 29.65, y: 23.9, rot: 0 },       // south-west corner — fronts north
+  { kind: "stall", x: 31.55, y: 23.85, rot: 0 },      // the south row, mid
 
   // Street flames — sparse; nights stay dark between them
   { kind: "torch", x: 5.5, y: 21.4 },
@@ -753,7 +763,9 @@ const SPRITES: SpriteDef[] = [
   { kind: "torch", x: 86.5, y: 22.6 },
   { kind: "cart", x: 66.5, y: 22.6, search: "cart_timber", examine: "the bodies' cart" },
   { kind: "deadStall", x: 70.5, y: 22.5 },
+  { kind: "deadStall", x: 72.7, y: 21.65 },
   { kind: "deadStall", x: 82.5, y: 22.4 },
+  { kind: "deadStall", x: 80.7, y: 21.7, rot: -1.5708 },
   // The marquee — cots under canvas, the slab, Marguerite's vigil
   { kind: "bed", x: 65.6, y: 13.5, rot: 1.5708 },
   { kind: "bed", x: 69.5, y: 13.5, rot: 1.5708 },
@@ -1233,21 +1245,34 @@ export interface Spot {
 
 // Doorway stoops on the free side — where villagers live and where their
 // days are spent. Homes are every house's front step; haunts are the well,
-// the plaza and the named establishments; the tavern is the inn's door.
-export function villagerSpots(): { homes: Spot[]; haunts: Spot[]; tavern: Spot } {
+// the plaza and the named establishments; the tavern is the inn's door. The
+// market list is a browse point at every stall front — errands land there
+// most of the day, so the square stays busy.
+export function villagerSpots(): { homes: Spot[]; haunts: Spot[]; tavern: Spot; market: Spot[] } {
   const stoop = (b: (typeof BUILDINGS)[number]): Spot => ({
     x: b.door.at + 0.5,
     y: b.door.side === "N" ? b.y0 - 0.5 : b.y1 + 1.5,
   });
   const homes: Spot[] = [];
+  const market: Spot[] = [
+    // A spot at each stall's boards — the crowd gathers where the wares are.
+    { x: 33.05, y: 19.5 },   // the north-east nook
+    { x: 30.3, y: 21.1 },    // the herbwife's
+    { x: 30.6, y: 20.8 },    // the west edge, north
+    { x: 30.55, y: 21.8 },   // the west edge, south
+    { x: 31.8, y: 21.3 },    // the inner row
+    { x: 33.35, y: 21.8 },   // the east edge
+    { x: 29.65, y: 23.05 },  // the south-west corner
+    { x: 30.7, y: 22.8 },    // the clothier's
+    { x: 31.55, y: 23.05 },  // the south row
+    { x: 32.4, y: 23.0 },    // mother anette's rags
+    { x: 33.25, y: 22.75 },  // the costermonger's boards
+    { x: 31.0, y: 22.35 },   // in the thick of it
+    { x: 32.0, y: 22.45 },   // threading between the stalls
+  ];
   const haunts: Spot[] = [
     { x: 30.6, y: 21.9 }, // drawing water at the well
     { x: 32.6, y: 22.6 }, // crossing the plaza
-    // The market — browsing the stall fronts is half the city's day.
-    { x: 30.3, y: 21.1 },  // haggling at the herb stall
-    { x: 30.7, y: 22.8 },  // fingering cloth
-    { x: 32.4, y: 23.0 },  // the rags stall
-    { x: 33.25, y: 22.7 }, // the costermonger's boards
   ];
   let tavern: Spot = { x: 20.5, y: 9.5 }; // the inn's door, if the list moves
   for (const b of BUILDINGS) {
@@ -1259,7 +1284,7 @@ export function villagerSpots(): { homes: Spot[]; haunts: Spot[]; tavern: Spot }
       if (b.name === "the inn") tavern = s;
     }
   }
-  return { homes, haunts, tavern };
+  return { homes, haunts, tavern, market };
 }
 
 export function isWall(map: GameMap, x: number, y: number): boolean {
