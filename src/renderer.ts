@@ -81,7 +81,6 @@ export class Renderer {
   // rasterisers share them. colTop records the highest row a column's
   // walls drew — rows above it are open, whatever the z-buffer holds.
   private readonly flatDepth = new Float32Array(W * H);
-  private readonly flatMin = new Float64Array(W);
   private readonly colTop = new Int16Array(W);
   private fogNear = 0;
   private fogFar = 1;
@@ -678,6 +677,9 @@ export class Renderer {
   ): void {
     const buf = this.buf;
     const bandNorm = LIGHT_BANDS - 1;
+    // Cleared before the broad reject — the sprite pass reads flatDepth
+    // every frame, so it must never hold last frame's geometry.
+    this.flatDepth.fill(Infinity);
     // Broad reject — props behind the viewer or beyond the fog can't hit.
     const near = map.props.filter((p) => {
       const dx = p.x - player.x;
@@ -691,10 +693,8 @@ export class Renderer {
     // Same projection the floor uses: each screen row maps to one distance
     // on the plane, then it's a point-in-rect test. Lids above eye level
     // only ever show an underside, so they're skipped. Depth is tracked
-    // per-pixel (flatDepth) so lids occlude each other, and per-column
-    // (flatMin) so walls and sprites clip them.
-    this.flatDepth.fill(Infinity);
-    this.flatMin.fill(Infinity);
+    // per-pixel (flatDepth) so lids, faces and sprites occlude each other
+    // exactly where they cover a pixel.
     const rlX = dirX - planeX;
     const rlY = dirY - planeY;
     const stX = (dirX + planeX - rlX) / W;
@@ -748,7 +748,6 @@ export class Renderer {
             if (y >= this.colTop[x] && dist >= this.zbuf[x]) continue;
             if (dist >= this.flatDepth[row + x]) continue;
             this.flatDepth[row + x] = dist;
-            if (below && dist < this.flatMin[x]) this.flatMin[x] = dist; // sprites clip only below the horizon
             const u = (lx + hw) / (2 * hw);
             const v = (ly + hd) / (2 * hd);
             const ti =
@@ -795,7 +794,6 @@ export class Renderer {
       if (hits.length === 0) continue;
       hits.sort((a, b) => b.t - a.t); // far to near — nearer faces overpaint
 
-      let nearest = this.zbuf[x];
       const xb = x & 3;
       for (const hit of hits) {
         const f = hit.f;
@@ -839,17 +837,14 @@ export class Renderer {
           // A nearer lid pixel owns this dot — the row spans differ, so the
           // test has to be per-pixel, not per-column.
           if (hit.t >= this.flatDepth[o >> 2]) continue;
+          // The face owns this pixel's depth so sprites clip against the
+          // exact prop silhouette, not just the column's nearest face.
+          this.flatDepth[o >> 2] = hit.t;
           buf[o] = lerp(t.data[ti] * trC * bp, FOG_R, fog);
           buf[o + 1] = lerp(t.data[ti + 1] * tgC * bp, FOG_G, fog);
           buf[o + 2] = lerp(t.data[ti + 2] * tbC * bp, FOG_B, fog);
         }
-        if (hit.t < nearest) nearest = hit.t;
       }
-      this.zbuf[x] = nearest;
-    }
-    // Lids join the column depth last — sprites behind a tabletop clip.
-    for (let x = 0; x < W; x++) {
-      if (this.flatMin[x] < this.zbuf[x]) this.zbuf[x] = this.flatMin[x];
     }
   }
 
@@ -962,9 +957,12 @@ export class Renderer {
           const ti = (v * frame.w + u) * 4;
           const a = frame.data[ti + 3];
           if (a < 128) continue;
+          const o = (y * W + x) * 4;
+          // A prop pixel in front owns this dot — the figure shows through
+          // the open bands of a stall instead of hiding as a whole.
+          if (hit >= this.flatDepth[o >> 2]) continue;
           const dth = (BAYER[((y & 3) << 2) | xb] - 0.5) * DITHER_AMP;
           const bp = Math.min(1, Math.max(0, bright + dth));
-          const o = (y * W + x) * 4;
           buf[o] = lerp(frame.data[ti] * trC * bp, FOG_R, fog);
           buf[o + 1] = lerp(frame.data[ti + 1] * tgC * bp, FOG_G, fog);
           buf[o + 2] = lerp(frame.data[ti + 2] * tbC * bp, FOG_B, fog);
