@@ -49,6 +49,7 @@ interface ModelFace {
   tex: number;
   sh: number; // baked face brightness — front lit, sides dim, back darkest
   az: number; // the face's bearing — feeds the live sunlight term
+  flip?: boolean; // u runs against the screen — draw the texture mirrored
   z0: number;
   z1: number;
 }
@@ -940,10 +941,12 @@ export class Renderer {
           const z0 = p.z0 * sc;
           const z1 = p.z1 * sc;
           // front (+facing), right, back, left — baked face shading like
-          // props, and a bearing each so the sun catches them live.
-          faces.push({ x0: cx + fwx * hd - rtx * hw, y0: cy + fwy * hd - rty * hw, x1: cx + fwx * hd + rtx * hw, y1: cy + fwy * hd + rty * hw, tex: p.tex[0], sh: 1.0, az: yaw, z0, z1 });
+          // props, and a bearing each so the sun catches them live. Front and
+          // back wind right-to-left as the viewer sees them, so their texX
+          // flips; the side faces already run the screen's way.
+          faces.push({ x0: cx + fwx * hd - rtx * hw, y0: cy + fwy * hd - rty * hw, x1: cx + fwx * hd + rtx * hw, y1: cy + fwy * hd + rty * hw, tex: p.tex[0], sh: 1.0, az: yaw, flip: true, z0, z1 });
           faces.push({ x0: cx + rtx * hw + fwx * hd, y0: cy + rty * hw + fwy * hd, x1: cx + rtx * hw - fwx * hd, y1: cy + rty * hw - fwy * hd, tex: p.tex[1], sh: 0.82, az: yaw - Math.PI / 2, z0, z1 });
-          faces.push({ x0: cx - fwx * hd + rtx * hw, y0: cy - fwy * hd + rty * hw, x1: cx - fwx * hd - rtx * hw, y1: cy - fwy * hd - rty * hw, tex: p.tex[2], sh: 0.66, az: yaw + Math.PI, z0, z1 });
+          faces.push({ x0: cx - fwx * hd + rtx * hw, y0: cy - fwy * hd + rty * hw, x1: cx - fwx * hd - rtx * hw, y1: cy - fwy * hd - rty * hw, tex: p.tex[2], sh: 0.66, az: yaw + Math.PI, flip: true, z0, z1 });
           faces.push({ x0: cx - rtx * hw - fwx * hd, y0: cy - rty * hw - fwy * hd, x1: cx - rtx * hw + fwx * hd, y1: cy - rty * hw + fwy * hd, tex: p.tex[3], sh: 0.82, az: yaw + Math.PI / 2, z0, z1 });
         }
         // Project the face corners to screen columns — a figure only ray-tests
@@ -1004,7 +1007,7 @@ export class Renderer {
             // wall's top edge — a figure behind a low wall keeps its head.
             if (hit.t >= this.zbuf[x]) yBot = Math.min(yBot, this.colTop[x] - 1);
             if (yTop > yBot) continue;
-            const texX = Math.min(TEX_SIZE - 1, Math.floor(hit.u * TEX_SIZE));
+            const texX = Math.min(TEX_SIZE - 1, Math.floor((hit.f.flip ? 1 - hit.u : hit.u) * TEX_SIZE));
             const ftx = tex.walls[f.tex];
             const span = f.z1 - f.z0;
             const qfog = fogFactor(hit.t, this.fogNear, this.fogFar);

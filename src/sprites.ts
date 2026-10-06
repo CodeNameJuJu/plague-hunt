@@ -2014,17 +2014,18 @@ function buildPerson(tex: TextureSet, pal: ModelPal): ModelPart[] {
   const headF = pushTex(tex, headTex(pal, 0)), headS = pushTex(tex, headTex(pal, 1)), headB = pushTex(tex, headTex(pal, 2));
   const parts: ModelPart[] = [];
   if (pal.dress === false) {
-    parts.push({ ox: -0.09, oy: 0, w: 0.15, d: 0.16, z0: 0, z1: 0.5, tex: [legF, legS, legB, legS], swing: 0.1, phase: 0 });
-    parts.push({ ox: 0.09, oy: 0, w: 0.15, d: 0.16, z0: 0, z1: 0.5, tex: [legF, legS, legB, legS], swing: 0.1, phase: Math.PI });
+    parts.push({ ox: -0.075, oy: 0, w: 0.11, d: 0.13, z0: 0, z1: 0.46, tex: [legF, legS, legB, legS], swing: 0.09, phase: 0 });
+    parts.push({ ox: 0.075, oy: 0, w: 0.11, d: 0.13, z0: 0, z1: 0.46, tex: [legF, legS, legB, legS], swing: 0.09, phase: Math.PI });
   } else {
-    parts.push({ ox: 0, oy: 0, w: 0.34, d: 0.26, z0: 0, z1: 0.52, tex: [legF, legS, legB, legS] });
+    parts.push({ ox: 0, oy: 0, w: 0.29, d: 0.22, z0: 0, z1: 0.48, tex: [legF, legS, legB, legS] });
   }
-  parts.push({ ox: 0, oy: 0, w: 0.38, d: 0.26, z0: 0.5, z1: 0.88, tex: [torF, torS, torB, torS] });
+  parts.push({ ox: 0, oy: 0, w: 0.31, d: 0.21, z0: 0.48, z1: 0.84, tex: [torF, torS, torB, torS] });
   if (!pal.noArms) {
-    parts.push({ ox: -0.27, oy: 0, w: 0.1, d: 0.13, z0: 0.56, z1: 0.82, tex: [arm, arm, arm, arm], swing: 0.09, phase: Math.PI });
-    parts.push({ ox: 0.27, oy: 0, w: 0.1, d: 0.13, z0: 0.56, z1: 0.82, tex: [arm, arm, arm, arm], swing: 0.09, phase: 0 });
+    // Arms tuck a hair into the torso so the shoulder seam never shows.
+    parts.push({ ox: -0.19, oy: 0, w: 0.08, d: 0.11, z0: 0.52, z1: 0.78, tex: [arm, arm, arm, arm], swing: 0.07, phase: Math.PI });
+    parts.push({ ox: 0.19, oy: 0, w: 0.08, d: 0.11, z0: 0.52, z1: 0.78, tex: [arm, arm, arm, arm], swing: 0.07, phase: 0 });
   }
-  parts.push({ ox: 0, oy: pal.hunch ? 0.06 : 0, w: 0.25, d: 0.24, z0: 0.88, z1: 1.14, tex: [headF, headS, headB, headS] });
+  parts.push({ ox: 0, oy: pal.hunch ? 0.05 : 0, w: 0.21, d: 0.19, z0: 0.84, z1: 1.04, tex: [headF, headS, headB, headS] });
   return parts;
 }
 
