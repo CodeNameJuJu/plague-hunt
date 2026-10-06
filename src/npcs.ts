@@ -26,6 +26,8 @@ export interface Villager {
   wait: number; // dawdling — buying bread, hailing a neighbour
   home: Spot; // the doorway they live behind
   homeward: boolean; // dusk — walking back to their own door
+  via?: Spot; // a mouth to pass through first — the yard's rows can't be jumped
+  browse?: boolean; // bound for a stall front — shoppers linger at the boards
 }
 
 export interface VillagerState {
@@ -66,6 +68,32 @@ export function makeVillagers(map: GameMap): VillagerState {
 function cellCenter(cells: number[], i: number, w: number): Spot {
   const c = cells[i];
   return { x: (c % w) + 0.5, y: Math.floor(c / w) + 0.5 };
+}
+
+// The market yard — walled dirt east of the plaza — is entered by its two
+// mouths; its stall rows have no gaps a body can slip through. An errand
+// inside routes through the nearer mouth first.
+const YARD = { x0: 30.8, x1: 34.6, y0: 24.1, y1: 33.9 };
+const YARD_MOUTHS: Spot[] = [
+  { x: 32.0, y: 24.55 }, // off the plaza's south edge, beside the brazier
+  { x: 33.4, y: 24.55 },
+  { x: 32.6, y: 33.6 },  // up from the south street
+];
+const inYard = (p: Spot) => p.x > YARD.x0 && p.x < YARD.x1 && p.y > YARD.y0 && p.y < YARD.y1;
+
+function setErrand(v: Villager, spot: Spot, market: Spot[]): void {
+  v.tx = spot.x;
+  v.ty = spot.y;
+  v.via = undefined;
+  v.browse = market.includes(spot);
+  if (!inYard(spot) || inYard(v)) return;
+  let best = YARD_MOUTHS[0];
+  let bd = Infinity;
+  for (const m of YARD_MOUTHS) {
+    const d = Math.hypot(m.x - v.x, m.y - v.y);
+    if (d < bd) { bd = d; best = m; }
+  }
+  v.via = best;
 }
 
 // Where a day's errand leads: market hours pull most folk to the stalls,
@@ -110,7 +138,7 @@ export function updateVillagers(
     if (homes.length > 0) {
       const home = homes[Math.floor(state.rand() * homes.length)];
       const errand = pickErrand(state, tday, map.w);
-      state.list.push({
+      const v: Villager = {
         x: home.x,
         y: home.y,
         tx: errand.x,
@@ -122,7 +150,9 @@ export function updateVillagers(
         wait: 0,
         home,
         homeward: false,
-      });
+      };
+      setErrand(v, errand, state.market);
+      state.list.push(v);
     }
   }
 
@@ -140,15 +170,23 @@ export function updateVillagers(
       v.wait -= dt;
       if (v.wait <= 0 && !v.homeward) {
         // Done dawdling — off on the next errand.
-        const t = pickErrand(state, tday, map.w);
-        v.tx = t.x;
-        v.ty = t.y;
+        setErrand(v, pickErrand(state, tday, map.w), state.market);
         v.progress = 0;
       }
       continue;
     }
-    const dx = v.tx - v.x;
-    const dy = v.ty - v.y;
+    // Yard errands enter by a mouth — the rows have no gaps a body can take.
+    if (v.via) {
+      const vd = Math.hypot(v.via.x - v.x, v.via.y - v.y);
+      if (vd < 0.6) {
+        v.via = undefined;
+        v.progress = 0; // through the mouth — fresh patience for the aisle
+      }
+    }
+    const gx = v.via ? v.via.x : v.tx;
+    const gy = v.via ? v.via.y : v.ty;
+    const dx = gx - v.x;
+    const dy = gy - v.y;
     const d = Math.hypot(dx, dy);
     if (d < 0.5 || v.progress > 30) {
       if (v.homeward) {
@@ -158,7 +196,8 @@ export function updateVillagers(
         continue;
       }
       // Arrived, or wandered too long — stand a while, then move on.
-      v.wait = 0.6 + state.rand() * 4;
+      // Shoppers linger at the boards; a passer-by just pauses.
+      v.wait = v.browse ? 3 + state.rand() * 7 : 0.6 + state.rand() * 4;
       continue;
     }
     const nx = v.x + (dx / d) * v.speed * dt;

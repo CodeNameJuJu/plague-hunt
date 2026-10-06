@@ -622,6 +622,25 @@ const SPRITES: SpriteDef[] = [
   { kind: "stall", x: 29.65, y: 23.9, rot: 0 },       // south-west corner — fronts north
   { kind: "stall", x: 31.55, y: 23.85, rot: 0 },      // the south row, mid
 
+  // The market yard — the walled dirt close east of center street is the
+  // market proper: two rows of stalls facing each other across an aisle,
+  // entered from the plaza at the north and the south street at the south.
+  { kind: "stall", x: 31.55, y: 26.3, rot: 1.5708 },  // west row — fronts the aisle
+  { kind: "stall", x: 31.55, y: 27.9, rot: 1.5708 },
+  { kind: "stall", x: 31.55, y: 29.5, rot: 1.5708 },
+  { kind: "stall", x: 31.55, y: 31.1, rot: 1.5708 },
+  { kind: "stall", x: 33.75, y: 25.6, rot: -1.5708 }, // east row — fronts the aisle
+  { kind: "stall", x: 33.75, y: 27.2, rot: -1.5708 },
+  { kind: "stall", x: 33.75, y: 28.8, rot: -1.5708 },
+  { kind: "stall", x: 33.75, y: 30.4, rot: -1.5708 },
+  { kind: "stall", x: 33.75, y: 32.0, rot: -1.5708 },
+  { kind: "stall", x: 32.55, y: 32.75, rot: 0 },      // the yard's south mouth
+  { kind: "brazier", x: 32.6, y: 24.85 },             // the market fire, in the north mouth
+  { kind: "barrel", x: 31.2, y: 25.3 },
+  { kind: "sack", x: 34.0, y: 24.9 },
+  { kind: "sack", x: 31.25, y: 32.7 },
+  { kind: "crate", x: 34.05, y: 33.0 },
+
   // Street flames — sparse; nights stay dark between them
   { kind: "torch", x: 5.5, y: 21.4 },
   { kind: "torch", x: 21.5, y: 21.4 },
@@ -1269,6 +1288,17 @@ export function villagerSpots(): { homes: Spot[]; haunts: Spot[]; tavern: Spot; 
     { x: 33.25, y: 22.75 },  // the costermonger's boards
     { x: 31.0, y: 22.35 },   // in the thick of it
     { x: 32.0, y: 22.45 },   // threading between the stalls
+    // The yard aisle — down between the two rows, stopping at the boards.
+    { x: 32.3, y: 26.3 },    // the west row
+    { x: 32.3, y: 27.9 },
+    { x: 32.3, y: 29.5 },
+    { x: 32.3, y: 31.1 },
+    { x: 33.0, y: 25.6 },    // the east row
+    { x: 33.0, y: 27.2 },
+    { x: 33.0, y: 28.8 },
+    { x: 33.0, y: 30.4 },
+    { x: 33.0, y: 32.0 },
+    { x: 32.55, y: 31.95 },  // the south mouth stall
   ];
   const haunts: Spot[] = [
     { x: 30.6, y: 21.9 }, // drawing water at the well
