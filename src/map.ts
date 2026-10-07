@@ -195,7 +195,7 @@ function stallFaces(x: number, y: number, rot: number, stocked: boolean): PropFa
 // rot turns a prop's run — stairs use it to climb toward the nearest wall.
 const PROP_BUILDERS: Record<string, (x: number, y: number, rot?: number) => PropDef> = {
   well: (x, y) => ({
-    x, y, block: 0.24,
+    x, y, block: 0.2,
     faces: [
       ...prismFaces(x, y, 0.22, 8, 0.26, W_STONE, Math.PI / 8),
       // The inner ring — dark, so the mouth reads as depth, not paint.
@@ -209,7 +209,7 @@ const PROP_BUILDERS: Record<string, (x: number, y: number, rot?: number) => Prop
     ],
   }),
   cart: (x, y) => ({
-    x, y, block: 0.28,
+    x, y, block: 0.22,
     faces: [
       ...boxFaces(x, y, 0.58, 0.32, 0.22, W_WOOD, 0, 0.09), // bed, raised on its axle
       topFace(x, y, 0.58, 0.32, 0.31, W_WOOD),
@@ -219,30 +219,30 @@ const PROP_BUILDERS: Record<string, (x: number, y: number, rot?: number) => Prop
       ...boxFaces(x + 0.42, y - 0.1, 0.35, 0.03, 0.03, W_WOOD, -0.35),
     ],
   }),
-  barrel: (x, y) => ({ x, y, block: 0.24, faces: prismFaces(x, y, 0.23, 8, 0.55, W_WOOD) }),
+  barrel: (x, y) => ({ x, y, block: 0.19, faces: prismFaces(x, y, 0.23, 8, 0.55, W_WOOD) }),
   crate: (x, y) => ({
-    x, y, block: 0.3,
+    x, y, block: 0.24,
     faces: [...boxFaces(x, y, 0.5, 0.5, 0.42, W_WOOD, 0.2), topFace(x, y, 0.5, 0.5, 0.42, W_WOOD, 0.2)],
   }),
   // Searchable containers — real furniture now. The sack is a squat belly
   // with a cinched neck; the chest a box with an overhanging darker lid.
   // Both kept small — they're clutter you kneel to, not furniture.
   sack: (x, y) => ({
-    x, y, block: 0.12,
+    x, y, block: 0.09,
     faces: [
       ...prismFaces(x, y, 0.12, 8, 0.16, W_WOOD, Math.PI / 8),
       ...prismFaces(x, y, 0.05, 6, 0.06, W_WOOD, 0, 0.16),
     ],
   }),
   chest: (x, y) => ({
-    x, y, block: 0.15,
+    x, y, block: 0.12,
     faces: [
       ...boxFaces(x, y, 0.26, 0.18, 0.14, W_WOOD),
       ...boxFaces(x, y, 0.28, 0.2, 0.035, W_TIMBER, 0, 0.14), // the lid, overhanging
       topFace(x, y, 0.28, 0.2, 0.175, W_TIMBER),
     ],
   }),
-  bed: (x, y, rot = 0) => ({ x, y, block: 0.32, faces: bedFaces(x, y, rot) }),
+  bed: (x, y, rot = 0) => ({ x, y, block: 0.25, faces: bedFaces(x, y, rot) }),
   // The autopsy slab — two stone trestles under a thick mortuary top, and
   // today's body laid out on it under its winding sheet: a low tapered
   // mound of linen with a rise where the head lies.
@@ -251,7 +251,7 @@ const PROP_BUILDERS: Record<string, (x: number, y: number, rot?: number) => Prop
     const [bx, by] = rotOff(x, y, rot, 0.26, 0);
     const [hx, hy] = rotOff(x, y, rot, -0.22, 0); // the head end
     return {
-      x, y, block: 0.22,
+      x, y, block: 0.17,
       faces: [
         ...boxFaces(ax, ay, 0.09, 0.26, 0.22, W_STONE, rot),
         ...boxFaces(bx, by, 0.09, 0.26, 0.22, W_STONE, rot),
@@ -265,15 +265,15 @@ const PROP_BUILDERS: Record<string, (x: number, y: number, rot?: number) => Prop
       ],
     };
   },
-  homebed: (x, y, rot = 0) => ({ x, y, block: 0.32, faces: bedFaces(x, y, rot) }),
-  desk: (x, y, rot = 0) => ({ x, y, block: 0.24, faces: tableFaces(x, y, rot, 0.5, 0.32, 0.27) }),
-  table: (x, y, rot = 0) => ({ x, y, block: 0.26, faces: tableFaces(x, y, rot, 0.58, 0.36, 0.25) }),
+  homebed: (x, y, rot = 0) => ({ x, y, block: 0.25, faces: bedFaces(x, y, rot) }),
+  desk: (x, y, rot = 0) => ({ x, y, block: 0.19, faces: tableFaces(x, y, rot, 0.5, 0.32, 0.27) }),
+  table: (x, y, rot = 0) => ({ x, y, block: 0.21, faces: tableFaces(x, y, rot, 0.58, 0.36, 0.25) }),
   grave: (x, y) => ({
-    x, y, block: 0.22,
+    x, y, block: 0.17,
     faces: boxFaces(x, y, 0.55, 0.13, 0.55, W_STONE, ((x * 31 + y * 17) % 10) / 60 - 0.08),
   }),
   deadTree: (x, y) => ({
-    x, y, block: 0.16,
+    x, y, block: 0.11,
     faces: [
       ...prismFaces(x, y, 0.11, 6, 1.3, W_WOOD),
       ...crossFaces(x, y, 0.55, 0.3, 0.95, W_WOOD, 0.5), // branch stubs near the crown
@@ -284,7 +284,7 @@ const PROP_BUILDERS: Record<string, (x: number, y: number, rot?: number) => Prop
   tree: (x, y) => {
     const lean = ((x * 31 + y * 17) % 10) / 25; // slight per-tree variance
     return {
-      x, y, block: 0.13,
+      x, y, block: 0.09,
       faces: [
         ...prismFaces(x, y, 0.09, 6, 0.8, W_WOOD),
         ...boxFaces(x, y, 0.62, 0.62, 0.5, W_FOLIAGE, lean, 0.62),
@@ -295,7 +295,7 @@ const PROP_BUILDERS: Record<string, (x: number, y: number, rot?: number) => Prop
   },
   // A door-side planter — a stone trough of greenery by a threshold.
   planter: (x, y, rot = 0) => ({
-    x, y, block: 0.2,
+    x, y, block: 0.14,
     faces: [
       ...boxFaces(x, y, 0.5, 0.22, 0.15, W_STONE, rot),
       topFace(x, y, 0.5, 0.22, 0.15, W_STONE, rot),
@@ -312,12 +312,12 @@ const PROP_BUILDERS: Record<string, (x: number, y: number, rot?: number) => Prop
   // over poles overhead. rot fronts the counter toward the customer (0
   // faces -y); the seller works the other side. `deadStall` is the same
   // bones stripped bare — the quarter's stalls stand empty.
-  stall: (x, y, rot = 0) => ({ x, y, block: 0.46, faces: stallFaces(x, y, rot, true) }),
-  deadStall: (x, y, rot = 0) => ({ x, y, block: 0.46, faces: stallFaces(x, y, rot, false) }),
+  stall: (x, y, rot = 0) => ({ x, y, block: 0.32, faces: stallFaces(x, y, rot, true) }),
+  deadStall: (x, y, rot = 0) => ({ x, y, block: 0.32, faces: stallFaces(x, y, rot, false) }),
   // A lantern post — a wood upright carrying a glass-paned lantern head,
   // for open ground where a sconce has no wall to hang on.
   lamp: (x, y) => ({
-    x, y, block: 0.08,
+    x, y, block: 0.06,
     faces: [
       ...prismFaces(x, y, 0.045, 6, 0.56, W_WOOD),
       ...boxFaces(x, y, 0.17, 0.17, 0.16, W_LAMP, 0.785, 0.56), // the glowing head, turned to catch the eye
@@ -667,9 +667,9 @@ const SPRITES: SpriteDef[] = [
   { kind: "tree", x: 47.6, y: 36.4 },  // the graveyard — one living tree
   { kind: "tree", x: 8.5, y: 5.5 },    // the alleys — trees in the gaps
   { kind: "tree", x: 8.5, y: 15.5 },   // between the houses
-  { kind: "tree", x: 8.5, y: 26.5 },
-  { kind: "tree", x: 53.5, y: 14.5 },
-  { kind: "tree", x: 53.5, y: 28.5 },
+  { kind: "tree", x: 8.72, y: 26.5 },
+  { kind: "tree", x: 53.72, y: 14.5 },
+  { kind: "tree", x: 53.72, y: 28.5 },
   { kind: "tree", x: 76.5, y: 9.5 },   // the camp's old park — still alive
   { kind: "tree", x: 83.5, y: 8.7 },   // where the dead trees stand
   { kind: "planter", x: 3.35, y: 9.06 },  // the bakery's threshold — tucked to the facade

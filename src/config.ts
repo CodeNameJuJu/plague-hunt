@@ -14,7 +14,7 @@ export const MOVE_SPEED = 2.6;
 export const RUN_MULTIPLIER = 1.7;
 export const TURN_SPEED = 2.2;
 export const MOUSE_SENSITIVITY = 0.0022;
-export const PLAYER_RADIUS = 0.22;
+export const PLAYER_RADIUS = 0.17;
 
 // View bob
 export const BOB_FREQUENCY = 7.5;
