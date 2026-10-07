@@ -108,17 +108,25 @@ export function roseWindow(px: number, seed = 7): HTMLCanvasElement {
       ctx.fillStyle = `rgb(${90 * jit | 0},${76 * jit | 0},${54 * jit | 0})`;
       ctx.fill();
     }
-    // Stone ring separating the bands.
-    ctx.strokeStyle = STONE;
-    ctx.lineWidth = Math.max(1.5, px * 0.016);
-    ctx.beginPath();
-    ctx.arc(cx, cy, rIn - ctx.lineWidth * 0.5, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = STONE_LIT;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(cx, cy, rIn - ctx.lineWidth - 1, -Math.PI * 0.7, Math.PI * 0.15);
-    ctx.stroke();
+    // Stone ring separating the bands. The innermost band of a small rose
+    // has an rIn too tight to stroke — skip rather than arc a negative
+    // radius, which throws on real canvases.
+    const ringR = rIn - Math.max(1.5, px * 0.016) * 0.5;
+    if (ringR > 0.5) {
+      ctx.strokeStyle = STONE;
+      ctx.lineWidth = Math.max(1.5, px * 0.016);
+      ctx.beginPath();
+      ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    const litR = rIn - 2;
+    if (litR > 0.5) {
+      ctx.strokeStyle = STONE_LIT;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, litR, -Math.PI * 0.7, Math.PI * 0.15);
+      ctx.stroke();
+    }
   }
 
   // The oculus — a carved boss, lit crown over a dark foot.
