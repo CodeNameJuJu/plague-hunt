@@ -234,6 +234,53 @@ class Ras {
   }
 }
 
+// Sallow skin — the quarter's diet and dread washed out of the flesh:
+// desaturated toward wax, darkened, cooled. Applied everywhere a Dress
+// hands out skin so every citizen carries the same pallor.
+function wan(c: [number, number, number]): [number, number, number] {
+  const l = (c[0] + c[1] + c[2]) / 3;
+  return [(c[0] * 0.55 + l * 0.45) * 0.9, (c[1] * 0.58 + l * 0.42) * 0.93, (c[2] * 0.55 + l * 0.45) * 0.95];
+}
+
+// Somber cloth — dyestuff cut with grey: hue kept so robes stay
+// identifiable, saturation and value both dragged down.
+function dour(c: [number, number, number]): [number, number, number] {
+  const l = (c[0] + c[1] + c[2]) / 3;
+  return [(c[0] * 0.62 + l * 0.38) * 0.9, (c[1] * 0.62 + l * 0.38) * 0.9, (c[2] * 0.62 + l * 0.38) * 0.9];
+}
+
+// The quarter's face — a narrower skull, the brow sunk in shadow, eyes
+// dark sockets, a downturned line of a mouth. Worn, not cute.
+function grimFaceR(r: Ras, fx: number, headY: number, skin: [number, number, number]): void {
+  r.ellipse(fx, headY, 4.5, 5.6, skin[0], skin[1], skin[2]);
+  // Brow shadow — the whole upper face sits in shade.
+  r.ellipse(fx, headY - 1.4, 4.2, 3, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
+  // Eye sockets — hollows under the brow, darker than any skin.
+  r.rect(fx - 2.9, headY - 0.6, fx - 1.1, headY + 0.9, 16, 12, 10);
+  r.rect(fx + 1.1, headY - 0.6, fx + 2.9, headY + 0.9, 16, 12, 10);
+  // Nose — a lit ridge over a shadowed base.
+  r.px(fx, headY + 0.8, skin[0] * 0.85, skin[1] * 0.85, skin[2] * 0.85);
+  r.px(fx, headY + 1.8, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
+  // Gaunt cheeks.
+  r.px(fx - 3.2, headY + 1.9, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
+  r.px(fx + 3.2, headY + 1.9, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
+  // A grim mouth — a flat dark line, downturned corners.
+  r.rect(fx - 1.3, headY + 3.4, fx + 1.3, headY + 3.9, skin[0] * 0.48, skin[1] * 0.48, skin[2] * 0.48);
+  r.px(fx - 2, headY + 3.1, skin[0] * 0.56, skin[1] * 0.56, skin[2] * 0.56);
+  r.px(fx + 2, headY + 3.1, skin[0] * 0.56, skin[1] * 0.56, skin[2] * 0.56);
+  // Jaw shadow — stubble and hollow over the chin.
+  r.rect(fx - 2.2, headY + 4.6, fx + 2.2, headY + 5.4, skin[0] * 0.68, skin[1] * 0.68, skin[2] * 0.68);
+  r.px(fx, headY + 5.2, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
+}
+
+// Street dirt — a stipple of mud worked into the cloth above the hem.
+function grimeR(r: Ras, hemL: number, hemR: number, hemY: number, seed: number, c: [number, number, number]): void {
+  const grr = rng(seed);
+  for (let x = hemL + 2; x < hemR - 2; x += 1.5) {
+    if (grr() < 0.5) r.px(x, hemY - 1.2 - grr() * 3.6, c[0] * 0.5, c[1] * 0.5, c[2] * 0.5);
+  }
+}
+
 // A shared figure builder — a shaded robe with folds, a face with eyes and
 // brow, hands and feet. Every citizen is this body plus distinguishing
 // extras drawn on top, so they all read at the same level of detail.
@@ -249,8 +296,8 @@ interface PersonOpts {
 }
 
 function person(s: SpriteTex, o: PersonOpts): void {
-  const [r, g, b] = o.robe;
-  const skin = o.skin ?? [172, 134, 98];
+  const [r, g, b] = dour(o.robe);
+  const skin = wan(o.skin ?? [172, 134, 98]);
   const hunch = o.hunch ?? 0;
   const sway = o.sway ?? 0;
   const headY = 20 + hunch * 5;
@@ -310,22 +357,23 @@ function person(s: SpriteTex, o: PersonOpts): void {
     line(s, 38 + sway * 0.5, shoulderY + 4, 36 + sway * 0.5, 44, 3, robeD[0], robeD[1], robeD[2]);
     ellipse(s, 32 + sway * 0.4, 45, 3, 3, skin[0], skin[1], skin[2]); // clasped hands
   }
-  // Neck shadow and head.
+  // Neck shadow and head — the same worn face the crowd wears, in raw
+  // pixels (this builder predates the rasterizer).
   rect(s, 30 + sway * 0.7, headY + 5, 34 + sway * 0.7, headY + 8, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
-  ellipse(s, 32 + sway * 0.8, headY, 5, 6, skin[0], skin[1], skin[2]);
-  // Brow, eyes, nose and mouth — a face, not a blob.
   const fx = 32 + sway * 0.8;
-  rect(s, fx - 3, headY - 2, fx + 3, headY - 1, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
-  // Brow ridges over each eye, cheek hollows and a chin shadow — skull under skin.
-  px(s, fx - 2, headY - 1.6, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
-  px(s, fx + 2, headY - 1.6, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
-  px(s, fx - 2, headY, 26, 20, 16);
-  px(s, fx + 2, headY, 26, 20, 16);
-  px(s, fx, headY + 1, skin[0] * 0.7, skin[1] * 0.7, skin[2] * 0.7);
-  px(s, fx - 2.6, headY + 1.8, skin[0] * 0.82, skin[1] * 0.82, skin[2] * 0.82); // cheek
-  px(s, fx + 2.6, headY + 1.8, skin[0] * 0.82, skin[1] * 0.82, skin[2] * 0.82);
-  rect(s, fx - 1, headY + 3, fx + 1, headY + 3, skin[0] * 0.58, skin[1] * 0.58, skin[2] * 0.58);
-  px(s, fx, headY + 4.6, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72); // chin light
+  ellipse(s, fx, headY, 4.5, 5.6, skin[0], skin[1], skin[2]);
+  ellipse(s, fx, headY - 1.4, 4.2, 3, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6); // brow shadow
+  rect(s, fx - 2.9, headY - 0.6, fx - 1.1, headY + 0.9, 16, 12, 10); // eye sockets
+  rect(s, fx + 1.1, headY - 0.6, fx + 2.9, headY + 0.9, 16, 12, 10);
+  px(s, fx, headY + 0.8, skin[0] * 0.85, skin[1] * 0.85, skin[2] * 0.85); // nose ridge
+  px(s, fx, headY + 1.8, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
+  px(s, fx - 3.2, headY + 1.9, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72); // cheeks
+  px(s, fx + 3.2, headY + 1.9, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
+  rect(s, fx - 1.3, headY + 3.4, fx + 1.3, headY + 3.9, skin[0] * 0.48, skin[1] * 0.48, skin[2] * 0.48); // grim mouth
+  px(s, fx - 2, headY + 3.1, skin[0] * 0.56, skin[1] * 0.56, skin[2] * 0.56);
+  px(s, fx + 2, headY + 3.1, skin[0] * 0.56, skin[1] * 0.56, skin[2] * 0.56);
+  rect(s, fx - 2.2, headY + 4.6, fx + 2.2, headY + 5.4, skin[0] * 0.68, skin[1] * 0.68, skin[2] * 0.68); // jaw shadow
+  px(s, fx, headY + 5.2, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8); // chin light
 }
 
 // A flame built from layered ellipses — outer red, mid orange, core yellow.
@@ -623,8 +671,8 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   const st = Math.sin(phase * Math.PI * 2);
   const bob = Math.abs(Math.cos(phase * Math.PI * 2)) * -0.4;
   const d = DRESSES[variant % DRESSES.length];
-  const [R, G, B] = d.robe;
-  const skin = d.skin;
+  const [R, G, B] = dour(d.robe);
+  const skin = wan(d.skin);
   const hunch = d.hunch ?? 0;
   const headY = 17 + hunch * 5 + bob;
   const shoulderY = 28 + hunch * 3 + bob;
@@ -709,6 +757,8 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
     for (let x = hemL + 3; x <= hemR - 3; x += 2.2)
       r.px(x, hemY - 2.6 + Math.sin(x) * 0.4, R * 1.28, G * 1.28, B * 1.28);
   }
+  // Mud stippled into the cloth above the hem — nobody's hem is clean.
+  grimeR(r, hemL, hemR, hemY, variant * 31 + 7, [R, G, B]);
   // Shoulder seams where the sleeves are set in.
   r.line(26.8 + sway * 0.3, shoulderY + 0.5, 29 + sway * 0.35, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62);
   r.line(37.2 + sway * 0.3, shoulderY + 0.5, 35 + sway * 0.35, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62);
@@ -729,22 +779,9 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
     r.ellipse(handBX, handY + 1, 2, 2.4, skin[0], skin[1], skin[2]);
   }
 
-  // Neck and head — brow shadow, eyes, a nose, a mouth line. A face, not
-  // a blob.
+  // Neck and head — the quarter's grim face under the brow shadow.
   r.rect(30 + sway * 0.5, headY + 4, 34 + sway * 0.5, headY + 8, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
-  r.ellipse(fx, headY, 4.8, 5.8, skin[0], skin[1], skin[2]);
-  // Cheek hollows and jaw shadow before the features — skull under skin.
-  r.px(fx - 3.1, headY + 1.6, skin[0] * 0.84, skin[1] * 0.84, skin[2] * 0.84);
-  r.px(fx + 3.1, headY + 1.6, skin[0] * 0.84, skin[1] * 0.84, skin[2] * 0.84);
-  r.rect(fx - 3, headY - 2, fx + 3, headY - 1, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
-  // Brow ridges — a crease above each eye.
-  r.line(fx - 2.6, headY - 1.7, fx - 1.2, headY - 1.9, 0.45, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
-  r.line(fx + 1.2, headY - 1.9, fx + 2.6, headY - 1.7, 0.45, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
-  r.px(fx - 2, headY, 26, 20, 16);
-  r.px(fx + 2, headY, 26, 20, 16);
-  r.px(fx, headY + 1.5, skin[0] * 0.7, skin[1] * 0.7, skin[2] * 0.7);
-  r.rect(fx - 1, headY + 3.5, fx + 1, headY + 3.5, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
-  r.px(fx, headY + 5.2, skin[0] * 0.76, skin[1] * 0.76, skin[2] * 0.76); // chin light
+  grimFaceR(r, fx, headY, skin);
 
   // The dressing — headgear and whatever they're carrying.
   switch (variant) {
@@ -917,8 +954,8 @@ const WALK_PHASES = [0, 0.25, 0.5, 0.75];
 function standRig(r: Ras, p: number, d: Dress): void {
   const bob = Math.sin(p * Math.PI * 2) * 0.3;
   const hunch = d.hunch ?? 0;
-  const [R, G, B] = d.robe;
-  const skin = d.skin;
+  const [R, G, B] = dour(d.robe);
+  const skin = wan(d.skin);
   const headY = 16.5 + hunch * 5 + bob * 0.5;
   const shoulderY = 27.5 + hunch * 3 + bob * 0.5;
   const hipY = 49.5;
@@ -994,6 +1031,7 @@ function standRig(r: Ras, p: number, d: Dress): void {
     r.line(hemL + 2, hemY - 1, hemR - 2, hemY - 1, 1.4, R * 0.6, G * 0.6, B * 0.6);
     for (let x = hemL + 3; x <= hemR - 3; x += 2.2) r.px(x, hemY - 2.6 + Math.sin(x) * 0.4, R * 1.28, G * 1.28, B * 1.28);
   }
+  grimeR(r, hemL, hemR, hemY, R ^ 11, [R, G, B]);
   if (d.patches) {
     r.rect(29, 46 + bob, 32.5, 49.5 + bob, R * 0.72, G * 0.72, B * 0.78);
     r.rect(35.5, 37 + bob, 37.5, 40 + bob, R * 0.62, G * 0.62, B * 0.68);
@@ -1006,19 +1044,9 @@ function standRig(r: Ras, p: number, d: Dress): void {
   // Hands — over the robe, on the silhouette.
   for (const [hx, hy] of hands) r.ellipse(hx, hy, 2, 2.4, skin[0], skin[1], skin[2]);
 
-  // Neck and head — the same real face the crowd wears.
+  // Neck and head — the same grim face the crowd wears.
   r.rect(30, headY + 4, 34, headY + 8, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
-  r.ellipse(fx, headY, 4.8, 5.8, skin[0], skin[1], skin[2]);
-  r.px(fx - 3.1, headY + 1.6, skin[0] * 0.84, skin[1] * 0.84, skin[2] * 0.84); // cheek hollows
-  r.px(fx + 3.1, headY + 1.6, skin[0] * 0.84, skin[1] * 0.84, skin[2] * 0.84);
-  r.rect(fx - 3, headY - 2, fx + 3, headY - 1, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
-  r.line(fx - 2.6, headY - 1.7, fx - 1.2, headY - 1.9, 0.45, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
-  r.line(fx + 1.2, headY - 1.9, fx + 2.6, headY - 1.7, 0.45, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
-  r.px(fx - 2, headY, 26, 20, 16);
-  r.px(fx + 2, headY, 26, 20, 16);
-  r.px(fx, headY + 1.5, skin[0] * 0.7, skin[1] * 0.7, skin[2] * 0.7);
-  r.rect(fx - 1, headY + 3.5, fx + 1, headY + 3.5, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
-  r.px(fx, headY + 5.2, skin[0] * 0.76, skin[1] * 0.76, skin[2] * 0.76); // chin light
+  grimFaceR(r, fx, headY, skin);
 }
 
 // Named NPCs idle — two breathing frames each.
@@ -1192,8 +1220,8 @@ function guardRig(r: Ras, phase: number): void {
   const st = Math.sin(phase * Math.PI * 2);
   const sway = st * 0.9; // weight drifting foot to foot
   const bob = Math.abs(st) * -0.15;
-  const tabard: [number, number, number] = [62, 76, 96];
-  const skin: [number, number, number] = [168, 130, 96];
+  const tabard: [number, number, number] = dour([62, 76, 96]);
+  const skin: [number, number, number] = wan([168, 130, 96]);
   const headY = 17 + bob;
   const shoulderY = 28 + bob;
   const hemY = 55 + bob;
