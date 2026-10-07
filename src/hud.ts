@@ -4,6 +4,7 @@
 import { canCraft, carried, count, RECIPES } from "./inventory";
 import { binds, keyName } from "./settings";
 import { ITEMS } from "./items";
+import { adornPanel, roseWindow } from "./ornaments";
 import type { Inventory } from "./inventory";
 import type { ItemId } from "./types";
 import type { SpriteTex } from "./types";
@@ -158,6 +159,14 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
   const counts: Record<string, HTMLElement> = {};
   const slots: Record<string, HTMLElement> = {};
 
+  // The needs plate wears the same chapel trim as the dialogue panels.
+  adornPanel(document.getElementById("bars")!);
+
+  // A rose medallion riding on the hotbar's top rail — the centre ornament.
+  const hotRose = roseWindow(46);
+  hotRose.className = "hotrose";
+  invBar.appendChild(hotRose);
+
   for (const def of SLOTS) {
     const slot = document.createElement("div");
     slot.className = "slot" + (def.id === "sous" ? " equip" : "");
@@ -199,6 +208,7 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
     panel.innerHTML = "";
     const box = document.createElement("div");
     box.className = "invpanel";
+    adornPanel(box);
     panel.appendChild(box);
 
     const head = document.createElement("h2");

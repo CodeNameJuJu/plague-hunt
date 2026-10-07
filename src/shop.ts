@@ -6,6 +6,7 @@ import { ITEMS, SHOPS } from "./items";
 import { count } from "./inventory";
 import type { Inventory } from "./inventory";
 import type { SpriteTex } from "./types";
+import { adornPanel } from "./ornaments";
 
 const SHOP_NAMES: Record<string, string> = {
   baker: "baker colin's stall",
@@ -41,6 +42,7 @@ export function initShop(
     el.innerHTML = "";
     const box = document.createElement("div");
     box.className = "shoppanel";
+    adornPanel(box);
     el.appendChild(box);
 
     const head = document.createElement("h2");

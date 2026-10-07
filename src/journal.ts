@@ -7,6 +7,7 @@
 import type { QuestState } from "./quests";
 import { CLUES, DEDUCTIONS } from "./clues";
 import { binds, keyName } from "./settings";
+import { adornPanel } from "./ornaments";
 
 export interface JournalPanel {
   toggle(q: QuestState): void;
@@ -22,6 +23,7 @@ export function initJournal(): JournalPanel {
     el.innerHTML = "";
     const box = document.createElement("div");
     box.className = "journalpage";
+    adornPanel(box);
     el.appendChild(box);
 
     const head = document.createElement("h2");

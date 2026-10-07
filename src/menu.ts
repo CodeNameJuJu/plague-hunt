@@ -11,6 +11,7 @@ import {
   saveSettings,
   settings,
 } from "./settings";
+import { lancet, roseWindow, tracery } from "./ornaments";
 import type { Action } from "./settings";
 
 export interface Menu {
@@ -64,6 +65,14 @@ export function initMenu(display: HTMLCanvasElement, onDescend: () => void): Men
 
   const panel = document.createElement("div");
   panel.className = "panel";
+  // The west facade behind the title — two lancet windows and the great
+  // rose turning slowly in the dark.
+  const rose = roseWindow(210);
+  rose.className = "title-rose";
+  const lancetL = lancet(108, 400, 11);
+  lancetL.className = "lancet left";
+  const lancetR = lancet(108, 400, 19);
+  lancetR.className = "lancet right";
   const title = document.createElement("h1");
   title.textContent = "PLAGUE HUNT";
   const rule = document.createElement("div");
@@ -72,12 +81,14 @@ export function initMenu(display: HTMLCanvasElement, onDescend: () => void): Men
   const sub = document.createElement("p");
   sub.className = "sub";
   sub.textContent = "paris · anno domini 1348 · you are the plague doctor";
-  panel.append(title, rule, sub);
+  const band = tracery(360, 17);
+  band.className = "title-tracery";
+  panel.append(rose, title, rule, sub, band);
   const pages = document.createElement("div");
   panel.appendChild(pages);
   root.innerHTML = "";
   root.appendChild(motes);
-  root.appendChild(panel);
+  root.append(lancetL, lancetR, panel);
 
   // --- main page ------------------------------------------------------------
 

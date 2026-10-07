@@ -8,6 +8,7 @@
 // the second is something else entirely.
 
 import { AUTOPSY_FINDINGS } from "./quests";
+import { adornPanel } from "./ornaments";
 
 const SITES = [
   { name: "the head", x: 100, y: 38 },
@@ -199,6 +200,7 @@ export function initAutopsy(onDone: () => void): AutopsyPanel {
     el.innerHTML = "";
     box = document.createElement("div");
     box.className = "autopsypanel";
+    adornPanel(box);
     el.appendChild(box);
 
     const head = document.createElement("h2");
