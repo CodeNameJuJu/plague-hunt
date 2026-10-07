@@ -39,6 +39,38 @@ function clamp(v: number): number {
   return v < 0 ? 0 : v > 255 ? 255 : v;
 }
 
+// The grade — the last pass over every world texture. Saturation pulls the
+// palette away from murk, the S-curve opens the values up, and the split-tone
+// drops shadows toward indigo and lit stone toward amber: the Warlock trick
+// of darkness being a colour, not an absence.
+function grade(tex: Texture): Texture {
+  for (let i = 0; i < tex.data.length; i += 3) {
+    const r = tex.data[i], g = tex.data[i + 1], b = tex.data[i + 2];
+    const m = (r + g + b) / 3;
+    // Saturation — pull each channel away from its own mean.
+    let nr = m + (r - m) * 1.5;
+    let ng = m + (g - m) * 1.5;
+    let nb = m + (b - m) * 1.5;
+    // Contrast — an S-curve around mid value deepens the shadows and lets
+    // the lit faces carry further.
+    const curve = (v: number) => 112 + (v - 112) * 1.16;
+    nr = curve(nr);
+    ng = curve(ng);
+    nb = curve(nb);
+    // Split-tone — cool the darks, warm the lights.
+    const lum = (nr * 0.3 + ng * 0.59 + nb * 0.11) / 255;
+    const shade = Math.max(0, 0.45 - lum); // 0..0.45 in the shadows
+    const lit = Math.max(0, lum - 0.6);    // 0..0.4 in the lights
+    nr = nr - shade * 18 + lit * 34;
+    ng = ng - shade * 10 + lit * 12;
+    nb = nb + shade * 26 - lit * 20;
+    tex.data[i] = clamp(nr);
+    tex.data[i + 1] = clamp(ng);
+    tex.data[i + 2] = clamp(nb);
+  }
+  return tex;
+}
+
 function rect3(tex: Texture, x0: number, y0: number, x1: number, y1: number, r: number, g: number, b: number): void {
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
@@ -1546,7 +1578,7 @@ export function buildTextures(): TextureSet {
     foliageWall(), // 27 — clipped leaf mass: trees, shrubs, window boxes
     rockWall(), // 28 — uncoursed mountain granite: the high pass
     snowCragWall(), // 29 — the same crag snow-capped: the ridge's crest cells
-  ];
+  ].map(grade);
   // Facade ids that have a candle-lit version for night-time.
   const wallsLit = new Uint8Array(walls.length);
   wallsLit[7] = 8;
@@ -1555,8 +1587,8 @@ export function buildTextures(): TextureSet {
   return {
     walls,
     wallsLit,
-    floors: [makeTex(), flagstoneFloor(), carpetFloor(), dirtFloor(), cobbleFloor(), woodFloor(), sewerFloor(), grassFloor()],
-    ceils: [makeTex(), beamCeiling(), nightSky(), daySky(), vaultCeiling()],
+    floors: [makeTex(), flagstoneFloor(), carpetFloor(), dirtFloor(), cobbleFloor(), woodFloor(), sewerFloor(), grassFloor()].map(grade),
+    ceils: [makeTex(), beamCeiling(), nightSky(), daySky(), vaultCeiling()].map(grade),
     models: {}, // filled by buildSpriteModels — the wall table isn't done yet
   };
 }

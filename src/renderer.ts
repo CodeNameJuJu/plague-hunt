@@ -14,18 +14,19 @@ import type { LightSample } from "./lighting";
 import type { GameMap, LightDef, PropFace, SpriteRuntime, Texture, TextureSet } from "./types";
 import type { Player } from "./player";
 
-// Colour of the dark. Everything fades toward this with distance.
-const FOG_R = 7;
-const FOG_G = 6;
-const FOG_B = 10;
+// Colour of the dark. Everything fades toward this with distance — a deep
+// indigo, so the dark itself is a colour rather than an absence.
+const FOG_R = 10;
+const FOG_G = 8;
+const FOG_B = 24;
 
 // Height of a window sill in storeys — the open slit sits above it.
 const SILL_H = 0.42;
 
-// Light tints: murky cold darkness vs warm firelight — graded toward
-// Quake's brown-olive murk rather than clean blue.
-const COOL = { r: 0.68, g: 0.7, b: 0.92 };
-const WARM = { r: 1.08, g: 0.84, b: 0.5 };
+// Light tints: cold indigo darkness vs hot amber firelight — the Warlock
+// split, shadow and lamplight as opposing hues.
+const COOL = { r: 0.56, g: 0.68, b: 1.0 };
+const WARM = { r: 1.18, g: 0.78, b: 0.4 };
 
 // Ordered dithering — a 4×4 Bayer matrix (values 0–1). Quake's colormap
 // shading is the reference: band boundaries dissolve into stipple instead
@@ -41,7 +42,7 @@ const DITHER_AMP = 1.3 / (LIGHT_BANDS - 1);
 
 // Palette crunch — final colours are posterised to this many steps per
 // channel, with the Bayer matrix dithering the boundary. The 8-bit soul.
-const POSTER_STEP = 255 / 30;
+const POSTER_STEP = 255 / 24;
 
 // The sky dome wheels very slowly — texture u is compass bearing, so the
 // whole sky turns once in about eleven minutes.
@@ -335,7 +336,7 @@ export class Renderer {
               }
               // Direct sun on open ground — lit turf and cobbles flare
               // against the shadowed side of the street.
-              const sunBoost = sunlit === 1 && isFloor ? 1 + this.daylight * 0.5 * this.sunElev : 1;
+              const sunBoost = sunlit === 1 && isFloor ? 1 + this.daylight * 0.65 * this.sunElev : 1;
               const dth = (BAYER[brow | (x & 3)] - 0.5) * DITHER_AMP;
               const s = shade(
                 this.sample.bright * dim * sunlit * sunBoost + dth,
@@ -494,7 +495,7 @@ export class Renderer {
         // high; at night there's no sun to read.
         const sunDot =
           (side === 0 ? -Math.sign(rx) : 0) * this.sunX + (side === 1 ? -Math.sign(ry) : 0) * this.sunY;
-        bright *= 1 + this.daylight * 0.6 * (0.35 + 0.65 * this.sunElev) * sunDot;
+        bright *= 1 + this.daylight * 0.8 * (0.35 + 0.65 * this.sunElev) * sunDot;
         const fog = fogFactor(perp, this.fogNear, this.fogFar);
         // Tint is per column; brightness dithers per pixel so the band edges
         // stipple like a colormap gradient.
@@ -814,7 +815,7 @@ export class Renderer {
         // it, the lee dims. Faces without one (tent mouths, dark throats)
         // keep their baked shade only.
         if (f.az !== undefined) {
-          bright *= 1 + this.daylight * 0.55 * Math.cos(f.az - this.sunAz);
+          bright *= 1 + this.daylight * 0.7 * Math.cos(f.az - this.sunAz);
           bright = Math.min(1, Math.max(0, bright));
         }
         bright = Math.floor(bright * bandNorm) / bandNorm;
