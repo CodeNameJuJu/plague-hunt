@@ -646,25 +646,25 @@ interface Dress {
 }
 
 const DRESSES: Dress[] = [
-  // hooded pilgrim — mud-brown wool, rope belt, satchel
-  { robe: [74, 58, 42], skin: [166, 128, 94], hose: [44, 38, 30], shoe: [30, 26, 22], belt: [58, 44, 28], ragged: true, patches: true },
-  // housewife — warm wool dress, bone kerchief, apron, basket
-  { robe: [92, 64, 48], skin: [172, 134, 98], hose: [52, 46, 38], shoe: [34, 28, 22], belt: [60, 50, 36] },
-  // tradesman — russet tunic, flat cap, a bundle under the arm
-  { robe: [96, 52, 40], skin: [174, 136, 100], hose: [46, 40, 32], shoe: [30, 26, 22], belt: [52, 38, 24] },
+  // hooded pilgrim — mud-brown wool, rope belt, satchel, hem to the shin
+  { robe: [74, 58, 42], skin: [166, 128, 94], hose: [44, 38, 30], shoe: [30, 26, 22], belt: [58, 44, 28], hemY: 52, ragged: true, patches: true },
+  // housewife — warm wool kirtle, bone kerchief, apron, basket
+  { robe: [92, 64, 48], skin: [172, 134, 98], hose: [52, 46, 38], shoe: [34, 28, 22], belt: [60, 50, 36], hemY: 50 },
+  // tradesman — russet doublet over hose, flat cap, a bundle under the arm
+  { robe: [96, 52, 40], skin: [174, 136, 100], hose: [46, 40, 32], shoe: [30, 26, 22], belt: [52, 38, 24], hemY: 44 },
   // beggar — layered grey rags, head shawl, bowl held out, barefoot
-  { robe: [64, 60, 54], skin: [152, 118, 88], hose: [56, 50, 44], shoe: [140, 106, 78], hunch: 0.55, ragged: true, patches: true },
-  // clerk — ink-blue robe, soft cap, ledger to the chest
-  { robe: [48, 54, 78], skin: [168, 132, 98], hose: [38, 34, 30], shoe: [30, 26, 22], belt: [36, 32, 24] },
+  { robe: [64, 60, 54], skin: [152, 118, 88], hose: [56, 50, 44], shoe: [140, 106, 78], hemY: 51, hunch: 0.55, ragged: true, patches: true },
+  // clerk — ink-blue gown cut at the knee, soft cap, ledger to the chest
+  { robe: [48, 54, 78], skin: [168, 132, 98], hose: [38, 34, 30], shoe: [30, 26, 22], belt: [36, 32, 24], hemY: 47 },
   // fieldhand — moss tunic cut short, rolled sleeves, straw hat, rake
-  { robe: [62, 68, 44], skin: [180, 142, 102], hose: [50, 44, 34], shoe: [34, 28, 20], hemY: 47, bareArms: true },
-  // mourner — charcoal cloak and a deep hood, hands folded
-  { robe: [46, 44, 48], skin: [160, 124, 94], hose: [36, 32, 32], shoe: [24, 22, 20], hunch: 0.3, ragged: true, arms: "folded" },
+  { robe: [62, 68, 44], skin: [180, 142, 102], hose: [50, 44, 34], shoe: [34, 28, 20], hemY: 44, bareArms: true },
+  // mourner — charcoal cloak to the ground and a deep hood, hands folded
+  { robe: [46, 44, 48], skin: [160, 124, 94], hose: [36, 32, 32], shoe: [24, 22, 20], hemY: 56, hunch: 0.3, ragged: true, arms: "folded" },
   // carter — oxblood coat, hood down, whip trailing
-  { robe: [84, 42, 36], skin: [170, 130, 96], hose: [42, 36, 30], shoe: [30, 26, 22], belt: [48, 34, 22], patches: true },
-  // patrolman — the provost's blue-grey, kettle helm, lantern swinging.
-  // Crowd villagers never wear this one (see villagerVariants).
-  { robe: [62, 76, 96], skin: [168, 130, 96], hose: [40, 44, 50], shoe: [30, 26, 22], belt: [46, 36, 24] },
+  { robe: [84, 42, 36], skin: [170, 130, 96], hose: [42, 36, 30], shoe: [30, 26, 22], belt: [48, 34, 22], hemY: 45, patches: true },
+  // patrolman — the provost's blue-grey tabard over hose, kettle helm,
+  // lantern swinging. Crowd villagers never wear this one.
+  { robe: [62, 76, 96], skin: [168, 130, 96], hose: [40, 44, 50], shoe: [30, 26, 22], belt: [46, 36, 24], hemY: 46 },
 ];
 
 function villagerRig(r: Ras, phase: number, variant: number): void {
@@ -690,8 +690,15 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   const legTop = Math.min(hipY, hemY - 2);
   r.limb(30 - st * 0.6, legTop, footAX, footAY, 3.1, d.hose[0], d.hose[1], d.hose[2]);
   r.limb(34 + st * 0.6, legTop, footBX, footBY, 3.1, d.hose[0], d.hose[1], d.hose[2]);
-  r.ellipse(footAX, footAY + 0.6, 3, 1.8, d.shoe[0], d.shoe[1], d.shoe[2]);
-  r.ellipse(footBX, footBY + 0.6, 3, 1.8, d.shoe[0], d.shoe[1], d.shoe[2]);
+  // Knee shadow where the hose creases in the stride.
+  r.px(30 - st * 0.6 + st * 1.8, (legTop + footAY) * 0.55, d.hose[0] * 0.6, d.hose[1] * 0.6, d.hose[2] * 0.6);
+  r.px(34 + st * 0.6 - st * 1.8, (legTop + footBY) * 0.55, d.hose[0] * 0.6, d.hose[1] * 0.6, d.hose[2] * 0.6);
+  // Turned-down boot cuffs, then the boot proper — chunky leather, not a
+  // slipper.
+  r.ellipse(footAX, footAY - 2.2, 2.1, 1.6, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7);
+  r.ellipse(footBX, footBY - 2.2, 2.1, 1.6, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7);
+  r.ellipse(footAX, footAY + 0.4, 3.4, 2.3, d.shoe[0], d.shoe[1], d.shoe[2]);
+  r.ellipse(footBX, footBY + 0.4, 3.4, 2.3, d.shoe[0], d.shoe[1], d.shoe[2]);
 
   // Arms — hanging at the sides, swinging against the stride.
   const sleeve: [number, number, number] = [R * 0.8, G * 0.8, B * 0.8];
@@ -711,8 +718,8 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
     r.limb(26 + st * 1.8, 40 + bob, handAX, handY, 2.4, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
     r.limb(38 - st * 1.8, 40 + bob, handBX, handY, 2.4, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
   } else {
-    r.limb(26.5 + sway * 0.4, shoulderY + 2, handAX, handY, 3, sleeve[0], sleeve[1], sleeve[2]);
-    r.limb(37.5 + sway * 0.4, shoulderY + 2, handBX, handY, 3, sleeve[0], sleeve[1], sleeve[2]);
+    r.limb(26.5 + sway * 0.4, shoulderY + 2, handAX, handY, 3.4, sleeve[0], sleeve[1], sleeve[2]);
+    r.limb(37.5 + sway * 0.4, shoulderY + 2, handBX, handY, 3.4, sleeve[0], sleeve[1], sleeve[2]);
   }
 
   // Robe — a trapezoid whose hem swings with the stride. Ragged cloth gets
@@ -759,6 +766,36 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   }
   // Mud stippled into the cloth above the hem — nobody's hem is clean.
   grimeR(r, hemL, hemR, hemY, variant * 31 + 7, [R, G, B]);
+  // The layered torso — a bodice over the chest and a linen chemise at the
+  // throat, so the figure reads as dressed, not draped.
+  r.poly(
+    [
+      [27.5 + sway * 0.3, shoulderY + 1],
+      [36.5 + sway * 0.3, shoulderY + 1],
+      [37.5 + sway * 0.4, 43.5 + bob],
+      [26.5 + sway * 0.4, 43.5 + bob],
+    ],
+    R * 0.74, G * 0.74, B * 0.74
+  );
+  r.line(32 + sway * 0.35, shoulderY + 1.5, 32.1 + sway * 0.35, 43 + bob, 0.5, R * 0.55, G * 0.55, B * 0.55); // bodice opening
+  r.px(30.5 + sway * 0.35, 36 + bob, R * 1.2, G * 1.2, B * 1.2); // a lace
+  r.px(33.5 + sway * 0.35, 38.5 + bob, R * 1.2, G * 1.2, B * 1.2);
+  r.px(30.7 + sway * 0.35, 40.5 + bob, R * 1.2, G * 1.2, B * 1.2);
+  r.poly(
+    [
+      [29.5 + sway * 0.35, shoulderY + 0.2],
+      [34.5 + sway * 0.35, shoulderY + 0.2],
+      [33 + sway * 0.35, shoulderY + 3],
+      [31 + sway * 0.35, shoulderY + 3],
+    ],
+    186, 174, 152
+  ); // chemise — pale linen at the throat
+  // Lit edge down the light side of the robe — the rim that lifts the
+  // figure out of the dark street.
+  r.line(26.8 + sway * 0.35, shoulderY + 2, hemL + 1.5, hemY - 2, 0.55, R * 1.3, G * 1.3, B * 1.3);
+  // Sleeve caps — rounded shoulders wider than the robe's chest line.
+  r.ellipse(26 + sway * 0.35, shoulderY + 2.8, 2.3, 2.6, sleeve[0], sleeve[1], sleeve[2]);
+  r.ellipse(38 + sway * 0.35, shoulderY + 2.8, 2.3, 2.6, sleeve[0], sleeve[1], sleeve[2]);
   // Shoulder seams where the sleeves are set in.
   r.line(26.8 + sway * 0.3, shoulderY + 0.5, 29 + sway * 0.35, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62);
   r.line(37.2 + sway * 0.3, shoulderY + 0.5, 35 + sway * 0.35, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62);
@@ -768,8 +805,9 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
     r.rect(35.5 + sway * 0.4, 37 + bob, 37.5 + sway * 0.4, 40 + bob, R * 0.62, G * 0.62, B * 0.68);
   }
   if (d.belt) {
-    r.rect(26 + sway * 0.4, 43 + bob, 38 + sway * 0.4, 45 + bob, d.belt[0], d.belt[1], d.belt[2]);
-    r.px(31.5 + sway * 0.4, 44 + bob, d.belt[0] * 1.5, d.belt[1] * 1.5, d.belt[2] * 1.5); // the knot
+    r.rect(26 + sway * 0.4, 42.6 + bob, 38 + sway * 0.4, 45.4 + bob, d.belt[0], d.belt[1], d.belt[2]);
+    r.rect(30.8 + sway * 0.4, 43 + bob, 33 + sway * 0.4, 44.8 + bob, d.belt[0] * 1.7, d.belt[1] * 1.7, d.belt[2] * 1.7); // buckle
+    r.px(31.4 + sway * 0.4, 43.5 + bob, d.belt[0] * 2.1, d.belt[1] * 2.1, d.belt[2] * 2.1); // glint
   }
 
   // Hands after the robe so they read on the silhouette (folded arms draw
@@ -966,8 +1004,10 @@ function standRig(r: Ras, p: number, d: Dress): void {
   const legTop = Math.min(hipY, hemY - 2);
   r.limb(30, legTop, 29.5, 59.5, 3.1, d.hose[0], d.hose[1], d.hose[2]);
   r.limb(34, legTop, 34.5, 59.5, 3.1, d.hose[0], d.hose[1], d.hose[2]);
-  r.ellipse(29.5, 60, 3.4, 1.9, d.shoe[0], d.shoe[1], d.shoe[2]);
-  r.ellipse(34.5, 60, 3.4, 1.9, d.shoe[0], d.shoe[1], d.shoe[2]);
+  r.ellipse(29.5, 57.9, 2.1, 1.6, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7); // boot cuffs
+  r.ellipse(34.5, 57.9, 2.1, 1.6, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7);
+  r.ellipse(29.5, 60, 3.5, 2.2, d.shoe[0], d.shoe[1], d.shoe[2]);
+  r.ellipse(34.5, 60, 3.5, 2.2, d.shoe[0], d.shoe[1], d.shoe[2]);
 
   // Arms — sleeves drawn now, hands held for after the robe so they read
   // on the silhouette.
@@ -1032,13 +1072,25 @@ function standRig(r: Ras, p: number, d: Dress): void {
     for (let x = hemL + 3; x <= hemR - 3; x += 2.2) r.px(x, hemY - 2.6 + Math.sin(x) * 0.4, R * 1.28, G * 1.28, B * 1.28);
   }
   grimeR(r, hemL, hemR, hemY, R ^ 11, [R, G, B]);
+  // Layered torso — bodice, chemise at the throat, capped shoulders, a lit
+  // edge down the light side.
+  r.poly([[27.5, shoulderY + 1], [36.5, shoulderY + 1], [37.5, 43.5 + bob], [26.5, 43.5 + bob]], R * 0.74, G * 0.74, B * 0.74);
+  r.line(32, shoulderY + 1.5, 32.1, 43 + bob, 0.5, R * 0.55, G * 0.55, B * 0.55);
+  r.px(30.5, 36 + bob, R * 1.2, G * 1.2, B * 1.2);
+  r.px(33.5, 38.5 + bob, R * 1.2, G * 1.2, B * 1.2);
+  r.px(30.7, 40.5 + bob, R * 1.2, G * 1.2, B * 1.2);
+  r.poly([[29.5, shoulderY + 0.2], [34.5, shoulderY + 0.2], [33, shoulderY + 3], [31, shoulderY + 3]], 186, 174, 152);
+  r.line(26.8, shoulderY + 2, hemL + 1.5, hemY - 2, 0.55, R * 1.3, G * 1.3, B * 1.3);
+  r.ellipse(26, shoulderY + 2.8, 2.3, 2.6, sleeve[0], sleeve[1], sleeve[2]);
+  r.ellipse(38, shoulderY + 2.8, 2.3, 2.6, sleeve[0], sleeve[1], sleeve[2]);
   if (d.patches) {
     r.rect(29, 46 + bob, 32.5, 49.5 + bob, R * 0.72, G * 0.72, B * 0.78);
     r.rect(35.5, 37 + bob, 37.5, 40 + bob, R * 0.62, G * 0.62, B * 0.68);
   }
   if (d.belt) {
-    r.rect(26, 43 + bob, 38, 45 + bob, d.belt[0], d.belt[1], d.belt[2]);
-    r.px(31.5, 44 + bob, d.belt[0] * 1.5, d.belt[1] * 1.5, d.belt[2] * 1.5);
+    r.rect(26, 42.6 + bob, 38, 45.4 + bob, d.belt[0], d.belt[1], d.belt[2]);
+    r.rect(30.8, 43 + bob, 33, 44.8 + bob, d.belt[0] * 1.7, d.belt[1] * 1.7, d.belt[2] * 1.7);
+    r.px(31.4, 43.5 + bob, d.belt[0] * 2.1, d.belt[1] * 2.1, d.belt[2] * 2.1);
   }
 
   // Hands — over the robe, on the silhouette.
@@ -1081,7 +1133,7 @@ function nunFrame(p: number): SpriteTex {
 
 // Maître Aubert — olive robe, a full grey beard, the wide flat cap of an
 // apothecary, his satchel of physick slung over one shoulder.
-const AUBERT: Dress = { robe: [78, 66, 40], skin: [170, 132, 96], hose: [46, 40, 30], shoe: [28, 24, 20], belt: [52, 38, 24] };
+const AUBERT: Dress = { robe: [78, 66, 40], skin: [170, 132, 96], hose: [46, 40, 30], shoe: [28, 24, 20], belt: [52, 38, 24], hemY: 52 };
 function aubertFrame(p: number): SpriteTex {
   return standFrame(p, AUBERT, (r, _p, fx, headY, shoulderY) => {
     const bob = Math.sin(p * Math.PI * 2) * 0.3;
@@ -1102,7 +1154,7 @@ function aubertFrame(p: number): SpriteTex {
 
 // Foulques the gravedigger — drab and broad, soil-stained apron, a spade
 // carried over the shoulder like a man who never puts it down.
-const DIGGER: Dress = { robe: [62, 52, 38], skin: [176, 136, 98], hose: [44, 38, 30], shoe: [28, 24, 18], belt: [44, 34, 22], arms: "heldR" };
+const DIGGER: Dress = { robe: [62, 52, 38], skin: [176, 136, 98], hose: [44, 38, 30], shoe: [28, 24, 18], belt: [44, 34, 22], arms: "heldR", hemY: 47 };
 function diggerFrame(p: number): SpriteTex {
   return standFrame(p, DIGGER, (r, _p, fx, headY) => {
     const bob = Math.sin(p * Math.PI * 2) * 0.3;
@@ -1291,7 +1343,7 @@ function guardFrame(phase: number): SpriteTex {
 
 // Mistress Hélène, the innkeeper — russet dress, a clean white apron bib
 // to hem, kerchief, a tankard never far from her hand.
-const INNKEEP: Dress = { robe: [96, 52, 40], skin: [172, 134, 98], hose: [52, 44, 36], shoe: [32, 26, 20], belt: [60, 40, 28] };
+const INNKEEP: Dress = { robe: [96, 52, 40], skin: [172, 134, 98], hose: [52, 44, 36], shoe: [32, 26, 20], belt: [60, 40, 28], hemY: 52 };
 function innkeepFrame(p: number): SpriteTex {
   return standFrame(p, INNKEEP, (r, _p, fx, headY, _sy, hemY) => {
     const bob = Math.sin(p * Math.PI * 2) * 0.3;
@@ -1314,7 +1366,7 @@ function innkeepFrame(p: number): SpriteTex {
 
 // Baker Colin — flour-dusted apron over rolled sleeves, the pale round
 // cap, a peel paddle in hand. You can smell the ovens off him.
-const BAKER: Dress = { robe: [92, 78, 60], skin: [178, 140, 104], hose: [50, 44, 34], shoe: [30, 26, 22], belt: [64, 48, 32], arms: "heldR" };
+const BAKER: Dress = { robe: [92, 78, 60], skin: [178, 140, 104], hose: [50, 44, 34], shoe: [30, 26, 22], belt: [64, 48, 32], arms: "heldR", hemY: 50 };
 function bakerFrame(p: number): SpriteTex {
   return standFrame(p, BAKER, (r, _p, fx, headY, _sy, hemY) => {
     const bob = Math.sin(p * Math.PI * 2) * 0.3;
@@ -1428,7 +1480,7 @@ function hoodedFrame(p: number): SpriteTex {
 
 // The herbwife — moss robes and a grey-green kerchief, a darker apron, a
 // bunch of rue held up where the customer can see it.
-const HERBWIFE: Dress = { robe: [58, 70, 46], skin: [172, 136, 98], hose: [44, 40, 34], shoe: [30, 26, 20], belt: [50, 40, 26], arms: "heldR" };
+const HERBWIFE: Dress = { robe: [58, 70, 46], skin: [172, 136, 98], hose: [44, 40, 34], shoe: [30, 26, 20], belt: [50, 40, 26], arms: "heldR", hemY: 51 };
 function herbwifeFrame(p: number): SpriteTex {
   return standFrame(p, HERBWIFE, (r, _p, fx, headY, _sy, hemY) => {
     const bob = Math.sin(p * Math.PI * 2) * 0.3;
@@ -1451,7 +1503,7 @@ function herbwifeFrame(p: number): SpriteTex {
 
 // The clothier — madder-red robe, a merchant's flat cap, a length of pale
 // linen draped over his arm so it hangs in two falls.
-const CLOTHIER: Dress = { robe: [88, 44, 42], skin: [174, 134, 98], hose: [44, 38, 34], shoe: [30, 26, 22], belt: [56, 40, 26] };
+const CLOTHIER: Dress = { robe: [88, 44, 42], skin: [174, 134, 98], hose: [44, 38, 34], shoe: [30, 26, 22], belt: [56, 40, 26], hemY: 49 };
 function clothierFrame(p: number): SpriteTex {
   return standFrame(p, CLOTHIER, (r, _p, fx, headY) => {
     const bob = Math.sin(p * Math.PI * 2) * 0.3;
@@ -1468,7 +1520,7 @@ function clothierFrame(p: number): SpriteTex {
 
 // The costermonger — brown robe under a leather apron, flat cap, a tray of
 // round loaves held out before him.
-const MONGER: Dress = { robe: [78, 60, 40], skin: [176, 138, 100], hose: [46, 40, 32], shoe: [32, 26, 20], arms: "folded" };
+const MONGER: Dress = { robe: [78, 60, 40], skin: [176, 138, 100], hose: [46, 40, 32], shoe: [32, 26, 20], arms: "folded", hemY: 48 };
 function mongerFrame(p: number): SpriteTex {
   return standFrame(p, MONGER, (r, _p, fx, headY, _sy, hemY) => {
     const bob = Math.sin(p * Math.PI * 2) * 0.3;
@@ -1487,7 +1539,7 @@ function mongerFrame(p: number): SpriteTex {
 
 // Mother Anette — the rag-and-bone woman, faded mauve under a patched
 // shawl, grey bun pinned at the back. No shop; she sells gossip.
-const ANETTE: Dress = { robe: [72, 60, 64], skin: [168, 130, 96], hose: [46, 42, 40], shoe: [30, 26, 22], patches: true, arms: "folded" };
+const ANETTE: Dress = { robe: [72, 60, 64], skin: [168, 130, 96], hose: [46, 42, 40], shoe: [30, 26, 22], patches: true, arms: "folded", hemY: 52 };
 function anetteFrame(p: number): SpriteTex {
   return standFrame(p, ANETTE, (r, _p, fx, headY, shoulderY) => {
     const bob = Math.sin(p * Math.PI * 2) * 0.3;
