@@ -18,7 +18,9 @@ const SITES = [
 
 // Incision tuning — the cut zone is a few pixels either side of the mark,
 // the blade sweeps faster the deeper into the body you go.
-const CUT_HALF = 7;
+const CUT_HALF = 8;
+const CUT_SPAN = 18;
+const cutSweep = (i: number) => 1.6 + i * 0.3; // rad/s — slow enough to read
 const PROBE_RADIUS = 13;
 const MISS_PROBE = 7;
 const MISS_CUT = 18;
@@ -122,14 +124,14 @@ export function initAutopsy(onDone: () => void): AutopsyPanel {
       }
       if (cutting === i) {
         // The incision — a guide line, the true cut between the ticks, and
-        // the blade sweeping across. Click when the blade crosses the mark.
-        const span = 16;
-        const bx = m.x + Math.sin(t * (2.1 + i * 0.35)) * span;
+        // the blade sweeping across. Click while the blade rides the mark.
+        const bx = m.x + Math.sin(t * cutSweep(i)) * CUT_SPAN;
+        const inZone = Math.abs(bx - m.x) <= CUT_HALF;
         ctx.strokeStyle = "rgba(200, 180, 140, 0.35)";
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(m.x - span - 4, m.y);
-        ctx.lineTo(m.x + span + 4, m.y);
+        ctx.moveTo(m.x - CUT_SPAN - 4, m.y);
+        ctx.lineTo(m.x + CUT_SPAN + 4, m.y);
         ctx.stroke();
         ctx.strokeStyle = "rgba(216, 178, 96, 0.9)";
         ctx.beginPath();
@@ -138,8 +140,9 @@ export function initAutopsy(onDone: () => void): AutopsyPanel {
         ctx.moveTo(m.x + CUT_HALF, m.y - 3);
         ctx.lineTo(m.x + CUT_HALF, m.y + 3);
         ctx.stroke();
-        ctx.fillStyle = "#d8c092";
-        ctx.fillRect(Math.round(bx), m.y - 5, 1, 10);
+        // The blade glows when it crosses the true line — click to cut.
+        ctx.fillStyle = inZone ? "#f0e2b0" : "#d8c092";
+        ctx.fillRect(Math.round(bx) - (inZone ? 1 : 0), m.y - 5, inZone ? 3 : 1, 10);
         ctx.fillStyle = "#e8dcc0";
         ctx.fillRect(Math.round(bx) - 1, m.y - 7, 3, 3);
       }
@@ -234,17 +237,18 @@ export function initAutopsy(onDone: () => void): AutopsyPanel {
     const cy = ((e.clientY - r.top) / r.height) * 240;
 
     if (cutting >= 0) {
-      // The incision — a click drops the blade where it sweeps. Clicking
-      // well away from the wound line lifts the blade instead of cutting.
+      // The incision — a click is "cut now", judged on where the blade is,
+      // not where you clicked. Clicking well away from the wound line lifts
+      // the blade instead of cutting.
       const m = markAt(cutting);
       const i = cutting;
-      const bx = m.x + Math.sin(t * (2.1 + i * 0.35)) * 16;
+      const bx = m.x + Math.sin(t * cutSweep(i)) * CUT_SPAN;
       cutting = -1;
-      if (Math.abs(cy - m.y) > 10 || Math.abs(cx - m.x) > 24) {
+      if (Math.abs(cy - m.y) > 12 || Math.abs(cx - m.x) > 26) {
         say("you lift the blade — not there.");
         return;
       }
-      if (Math.abs(cx - bx) <= 4 && Math.abs(bx - m.x) <= CUT_HALF) {
+      if (Math.abs(bx - m.x) <= CUT_HALF) {
         doneSites.add(i);
         foundSites.delete(i);
         sayFinding(i);
@@ -279,9 +283,11 @@ export function initAutopsy(onDone: () => void): AutopsyPanel {
   });
 
   let raf = 0;
-  function tick(): void {
+  let last = 0;
+  function tick(now = 0): void {
     if (!open) return;
-    t += 1 / 30;
+    t += Math.min(0.1, last ? (now - last) / 1000 : 1 / 60);
+    last = now;
     drawBody();
     drawMarks();
     drawNerve();
@@ -305,6 +311,7 @@ export function initAutopsy(onDone: () => void): AutopsyPanel {
       el.classList.add("open");
       render();
       t = 0;
+      last = 0;
       tick();
       document.exitPointerLock();
     },
