@@ -281,12 +281,28 @@ function person(s: SpriteTex, o: PersonOpts): void {
       }
     }
   }
-  if (o.belt) rect(s, 26, 44, 38, 46, o.belt[0], o.belt[1], o.belt[2]);
+  // Front seam and a lit fold along the cloth's bright edge — the details
+  // that turn a flat trapezoid into a robe.
+  line(s, 32 + sway * 0.45, shoulderY + 3, 32 + sway * 0.2, 58, 0.6, r * 0.66, g * 0.66, b * 0.66);
+  line(s, 27.5 + sway * 0.5, shoulderY + 5, 24 + sway * 0.3, 57, 0.7, r * 1.18, g * 1.18, b * 1.18);
+  if (!o.ragHem) {
+    // Stitch row above the hem — little dashes of pale thread.
+    for (let x = 22; x <= 42; x += 2) px(s, x + sway * 0.3, 57.5, r * 1.25, g * 1.25, b * 1.25);
+  }
+  // Collar shadow where the robe meets the neck.
+  line(s, 29.5 + sway * 0.6, shoulderY + 1.5, 34.5 + sway * 0.6, shoulderY + 1.5, 1, r * 0.5, g * 0.5, b * 0.5);
+  if (o.belt) {
+    rect(s, 26, 44, 38, 46, o.belt[0], o.belt[1], o.belt[2]);
+    px(s, 32, 45, o.belt[0] * 1.7, o.belt[1] * 1.7, o.belt[2] * 1.7); // buckle glint
+  }
   // Sleeves and hands — tucked unless asked to hang.
   const robeD = [r * 0.82, g * 0.82, b * 0.82];
   if (o.armsDown) {
     line(s, 26 + sway * 0.5, shoulderY + 4, 23 + sway * 0.5, 50, 3, robeD[0], robeD[1], robeD[2]);
     line(s, 38 + sway * 0.5, shoulderY + 4, 41 + sway * 0.5, 50, 3, robeD[0], robeD[1], robeD[2]);
+    // Cuff bands at the wrist.
+    line(s, 23.4 + sway * 0.5, 48.5, 23.4 + sway * 0.5, 50, 3.2, r * 0.6, g * 0.6, b * 0.6);
+    line(s, 40.6 + sway * 0.5, 48.5, 40.6 + sway * 0.5, 50, 3.2, r * 0.6, g * 0.6, b * 0.6);
     ellipse(s, 23 + sway * 0.5, 51, 2, 2.5, skin[0], skin[1], skin[2]);
     ellipse(s, 41 + sway * 0.5, 51, 2, 2.5, skin[0], skin[1], skin[2]);
   } else {
@@ -300,10 +316,16 @@ function person(s: SpriteTex, o: PersonOpts): void {
   // Brow, eyes, nose and mouth — a face, not a blob.
   const fx = 32 + sway * 0.8;
   rect(s, fx - 3, headY - 2, fx + 3, headY - 1, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
+  // Brow ridges over each eye, cheek hollows and a chin shadow — skull under skin.
+  px(s, fx - 2, headY - 1.6, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
+  px(s, fx + 2, headY - 1.6, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
   px(s, fx - 2, headY, 26, 20, 16);
   px(s, fx + 2, headY, 26, 20, 16);
   px(s, fx, headY + 1, skin[0] * 0.7, skin[1] * 0.7, skin[2] * 0.7);
+  px(s, fx - 2.6, headY + 1.8, skin[0] * 0.82, skin[1] * 0.82, skin[2] * 0.82); // cheek
+  px(s, fx + 2.6, headY + 1.8, skin[0] * 0.82, skin[1] * 0.82, skin[2] * 0.82);
   rect(s, fx - 1, headY + 3, fx + 1, headY + 3, skin[0] * 0.58, skin[1] * 0.58, skin[2] * 0.58);
+  px(s, fx, headY + 4.6, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72); // chin light
 }
 
 // A flame built from layered ellipses — outer red, mid orange, core yellow.
@@ -678,9 +700,18 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   // Folds and the grime-dark hem band — torn cloth has no clean band.
   r.line(30 + sway * 0.4, shoulderY + 4, 28.5 + sway * 0.5, hemY - 1.5, 0.8, R * 0.8, G * 0.8, B * 0.8);
   r.line(34 + sway * 0.4, shoulderY + 4, 35.5 + sway * 0.5, hemY - 1.5, 0.8, R * 0.8, G * 0.8, B * 0.8);
+  // The bright fold catching light beside the dark ones, and a centre seam.
+  r.line(32 + sway * 0.4, shoulderY + 3, 32.2 + sway * 0.4, hemY - 2, 0.5, R * 1.16, G * 1.16, B * 1.16);
+  r.line(36.2 + sway * 0.4, shoulderY + 6, 39 + sway * 0.5, hemY - 2.5, 0.55, R * 0.88, G * 0.88, B * 0.88);
   if (!d.ragged) {
     r.line(hemL + 2, hemY - 1 + st * 0.4, hemR - 2, hemY - 1 - st * 0.4, 1.4, R * 0.6, G * 0.6, B * 0.6);
+    // Stitch dashes along the hem band — pale thread catching the light.
+    for (let x = hemL + 3; x <= hemR - 3; x += 2.2)
+      r.px(x, hemY - 2.6 + Math.sin(x) * 0.4, R * 1.28, G * 1.28, B * 1.28);
   }
+  // Shoulder seams where the sleeves are set in.
+  r.line(26.8 + sway * 0.3, shoulderY + 0.5, 29 + sway * 0.35, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62);
+  r.line(37.2 + sway * 0.3, shoulderY + 0.5, 35 + sway * 0.35, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62);
   // Mended squares — a servant's cloak is more patch than cloth.
   if (d.patches) {
     r.rect(29 + sway * 0.4, 46 + bob, 32.5 + sway * 0.4, 49.5 + bob, R * 0.72, G * 0.72, B * 0.78);
@@ -702,11 +733,18 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   // a blob.
   r.rect(30 + sway * 0.5, headY + 4, 34 + sway * 0.5, headY + 8, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
   r.ellipse(fx, headY, 4.8, 5.8, skin[0], skin[1], skin[2]);
+  // Cheek hollows and jaw shadow before the features — skull under skin.
+  r.px(fx - 3.1, headY + 1.6, skin[0] * 0.84, skin[1] * 0.84, skin[2] * 0.84);
+  r.px(fx + 3.1, headY + 1.6, skin[0] * 0.84, skin[1] * 0.84, skin[2] * 0.84);
   r.rect(fx - 3, headY - 2, fx + 3, headY - 1, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
+  // Brow ridges — a crease above each eye.
+  r.line(fx - 2.6, headY - 1.7, fx - 1.2, headY - 1.9, 0.45, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
+  r.line(fx + 1.2, headY - 1.9, fx + 2.6, headY - 1.7, 0.45, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
   r.px(fx - 2, headY, 26, 20, 16);
   r.px(fx + 2, headY, 26, 20, 16);
   r.px(fx, headY + 1.5, skin[0] * 0.7, skin[1] * 0.7, skin[2] * 0.7);
   r.rect(fx - 1, headY + 3.5, fx + 1, headY + 3.5, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
+  r.px(fx, headY + 5.2, skin[0] * 0.76, skin[1] * 0.76, skin[2] * 0.76); // chin light
 
   // The dressing — headgear and whatever they're carrying.
   switch (variant) {
@@ -948,7 +986,14 @@ function standRig(r: Ras, p: number, d: Dress): void {
   }
   r.line(30, shoulderY + 4, 28.5, hemY - 1.5, 0.8, R * 0.8, G * 0.8, B * 0.8);
   r.line(34, shoulderY + 4, 35.5, hemY - 1.5, 0.8, R * 0.8, G * 0.8, B * 0.8);
-  if (!d.ragged) r.line(hemL + 2, hemY - 1, hemR - 2, hemY - 1, 1.4, R * 0.6, G * 0.6, B * 0.6);
+  r.line(32, shoulderY + 3, 32.2, hemY - 2, 0.5, R * 1.16, G * 1.16, B * 1.16); // lit fold
+  r.line(36.2, shoulderY + 6, 39, hemY - 2.5, 0.55, R * 0.88, G * 0.88, B * 0.88);
+  r.line(26.8, shoulderY + 0.5, 29, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62); // shoulder seams
+  r.line(37.2, shoulderY + 0.5, 35, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62);
+  if (!d.ragged) {
+    r.line(hemL + 2, hemY - 1, hemR - 2, hemY - 1, 1.4, R * 0.6, G * 0.6, B * 0.6);
+    for (let x = hemL + 3; x <= hemR - 3; x += 2.2) r.px(x, hemY - 2.6 + Math.sin(x) * 0.4, R * 1.28, G * 1.28, B * 1.28);
+  }
   if (d.patches) {
     r.rect(29, 46 + bob, 32.5, 49.5 + bob, R * 0.72, G * 0.72, B * 0.78);
     r.rect(35.5, 37 + bob, 37.5, 40 + bob, R * 0.62, G * 0.62, B * 0.68);
@@ -964,11 +1009,16 @@ function standRig(r: Ras, p: number, d: Dress): void {
   // Neck and head — the same real face the crowd wears.
   r.rect(30, headY + 4, 34, headY + 8, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
   r.ellipse(fx, headY, 4.8, 5.8, skin[0], skin[1], skin[2]);
+  r.px(fx - 3.1, headY + 1.6, skin[0] * 0.84, skin[1] * 0.84, skin[2] * 0.84); // cheek hollows
+  r.px(fx + 3.1, headY + 1.6, skin[0] * 0.84, skin[1] * 0.84, skin[2] * 0.84);
   r.rect(fx - 3, headY - 2, fx + 3, headY - 1, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
+  r.line(fx - 2.6, headY - 1.7, fx - 1.2, headY - 1.9, 0.45, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
+  r.line(fx + 1.2, headY - 1.9, fx + 2.6, headY - 1.7, 0.45, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
   r.px(fx - 2, headY, 26, 20, 16);
   r.px(fx + 2, headY, 26, 20, 16);
   r.px(fx, headY + 1.5, skin[0] * 0.7, skin[1] * 0.7, skin[2] * 0.7);
   r.rect(fx - 1, headY + 3.5, fx + 1, headY + 3.5, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
+  r.px(fx, headY + 5.2, skin[0] * 0.76, skin[1] * 0.76, skin[2] * 0.76); // chin light
 }
 
 // Named NPCs idle — two breathing frames each.
