@@ -79,32 +79,47 @@ function line(s: SpriteTex, x0: number, y0: number, x1: number, y1: number, widt
   }
 }
 
-// A soft outline around the silhouette — opaque pixels that touch
-// transparency get darkened. The top rim only darkens a little: a hard cap
-// there reads as a black line hovering over every head.
-function edge(s: SpriteTex): void {
+const OUTLINE: [number, number, number] = [14, 10, 10];
+const LEVELS = 6; // tone bands
+
+// Cel shading — quantise luminance into bands while keeping hue.
+function cel(s: SpriteTex): void {
   const { w, h, data } = s;
-  const k = s.w / TEX_SIZE; // rim band scales with the bitmap
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      if (data[i + 3] < 128) continue;
-      const rimTop = y < k || data[i - w * 4 * k + 3] < 128 || data[i - w * 4 + 3] < 128;
-      const rimSide =
-        x < k || data[i - 4 * k + 3] < 128 ||
-        x >= w - k || data[i + 4 * k + 3] < 128 ||
-        y >= h - k || data[i + w * 4 * k + 3] < 128 ||
-        x === 0 || data[i - 4 + 3] < 128 ||
-        x === w - 1 || data[i + 4 + 3] < 128 ||
-        y === h - 1 || data[i + w * 4 + 3] < 128;
-      if (!rimTop && !rimSide) continue;
-      const lum = data[i] * 0.5 + data[i + 1] * 0.4 + data[i + 2] * 0.1;
-      if (lum < 42) continue; // already dark — don't blacken further
-      const f = rimSide ? 0.55 : 0.82;
-      data[i] *= f;
-      data[i + 1] *= f;
-      data[i + 2] *= f;
+  const step = 255 / LEVELS;
+  for (let i = 0; i < w * h * 4; i += 4) {
+    if (data[i + 3] < 128) continue;
+    const lum = data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11;
+    if (lum < 1) continue;
+    const q = Math.max(step * 0.6, Math.round(lum / step) * step);
+    const f = q / lum;
+    data[i] = Math.min(255, data[i] * f);
+    data[i + 1] = Math.min(255, data[i + 1] * f);
+    data[i + 2] = Math.min(255, data[i + 2] * f);
+  }
+}
+
+// Ink — a hard outline round the silhouette and a dark line where two
+// materials meet (the darker side takes the line).
+function ink(s: SpriteTex): void {
+  const { w, h, data } = s;
+  const k = s.w / TEX_SIZE; // one logical pixel in bitmap pixels
+  const mark = new Uint8Array(w * h); // 1 = silhouette outline, 2 = material edge
+  const lumAt = (x: number, y: number) => { const i = (y * w + x) * 4; return data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11; };
+  const solid = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && data[(y * w + x) * 4 + 3] >= 128;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!solid(x, y)) continue;
+    if (!solid(x - k, y) || !solid(x + k, y) || !solid(x, y - k) || !solid(x, y + k)) { mark[y * w + x] = 1; continue; }
+    const l = lumAt(x, y);
+    for (const [dx, dy] of [[k, 0], [0, k], [-k, 0], [0, -k]] as const) {
+      const nl = lumAt(x + dx, y + dy);
+      if (nl - l > 46) { mark[y * w + x] = 2; break; } // I'm the dark side of a strong edge
     }
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const m = mark[y * w + x]; if (!m) continue;
+    const i = (y * w + x) * 4;
+    if (m === 1) { data[i] = OUTLINE[0]; data[i + 1] = OUTLINE[1]; data[i + 2] = OUTLINE[2]; }
+    else { data[i] *= 0.42; data[i + 1] *= 0.42; data[i + 2] *= 0.42; }
   }
 }
 
@@ -124,30 +139,12 @@ function form(s: SpriteTex): void {
   }
 }
 
-// Fine grain woven into the art at bitmap scale — it only reads at high
-// sprite resolutions, where it breaks up the flat fields into cloth and hide.
-// Deterministic per-pixel hash, so it costs no rng state.
-function grain(s: SpriteTex): void {
-  const { w, h, data } = s;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      if (data[i + 3] < 128) continue;
-      const n = (((x * 73856093) ^ (y * 19349663)) >>> 0) / 4294967296 - 0.5;
-      const f = 1 + n * 0.1;
-      data[i] *= f;
-      data[i + 1] *= f;
-      data[i + 2] *= f;
-    }
-  }
-}
-
-// The finishing pass applied to every solid sprite — volume, grain, outline.
-// Flame and glow sprites skip it: dark rims would kill the bloom.
+// The finishing pass applied to every solid sprite — volume, cel-shaded
+// tone bands, ink outlines. Flame and glow sprites skip it.
 function finish(s: SpriteTex): SpriteTex {
   form(s);
-  grain(s);
-  edge(s);
+  cel(s);
+  ink(s);
   return s;
 }
 
@@ -287,14 +284,15 @@ class Ras {
 // hands out skin so every citizen carries the same pallor.
 function wan(c: [number, number, number]): [number, number, number] {
   const l = (c[0] + c[1] + c[2]) / 3;
-  return [(c[0] * 0.72 + l * 0.28) * 0.96, (c[1] * 0.72 + l * 0.28) * 0.97, (c[2] * 0.72 + l * 0.28) * 0.97];
+  return [(c[0] * 0.8 + l * 0.2) * 1.0, (c[1] * 0.8 + l * 0.2) * 0.98, (c[2] * 0.8 + l * 0.2) * 0.96];
 }
 
 // Somber cloth — dyestuff cut with grey: hue kept so robes stay
 // identifiable, saturation and value both dragged down.
 function dour(c: [number, number, number]): [number, number, number] {
   const l = (c[0] + c[1] + c[2]) / 3;
-  return [(c[0] * 0.62 + l * 0.38) * 0.9, (c[1] * 0.62 + l * 0.38) * 0.9, (c[2] * 0.62 + l * 0.38) * 0.9];
+  const cl = (v: number) => Math.min(255, Math.max(0, (l + (v - l) * 1.3) * 0.9));
+  return [cl(c[0]), cl(c[1]), cl(c[2])];
 }
 
 // The quarter's face — a narrower skull, the brow sunk in shadow, eyes
@@ -395,18 +393,12 @@ function hairR(r: Ras, fx: number, headY: number, shoulderY: number, style: Hair
   }
 }
 
-function hairFrontR(r: Ras, fx: number, headY: number, style: HairStyle | undefined, color: [number, number, number] | undefined, scale = 1, seed = 0): void {
+function hairFrontR(r: Ras, fx: number, headY: number, style: HairStyle | undefined, color: [number, number, number] | undefined, scale = 1): void {
   if (!style || !color || style === "bald") return;
   const [hr, hg, hb] = color;
   const S = scale;
-  const hrand = rng(seed * 61 + 5);
   // The fringe — hair crossing the brow over the face.
   r.line(fx - 3.4 * S, headY - 3.6 * S, fx + 3.4 * S, headY - 3.6 * S, 0.8, hr * 0.85, hg * 0.85, hb * 0.85);
-  // A few strands and two highlights on the lit side.
-  for (let i = 0; i < 3 + Math.floor(hrand() * 2); i++) {
-    const sx = fx - 3 * S + hrand() * 6 * S;
-    r.line(sx, headY - 4.8 * S, sx + (hrand() - 0.5) * 1.4, headY - 2.4 * S, 0.4, hr * 0.7, hg * 0.7, hb * 0.7);
-  }
   r.px(fx - 2.2 * S, headY - 5 * S, Math.min(255, hr * 1.5), Math.min(255, hg * 1.5), Math.min(255, hb * 1.5));
   r.px(fx - 1 * S, headY - 5.6 * S, Math.min(255, hr * 1.5), Math.min(255, hg * 1.5), Math.min(255, hb * 1.5));
 }
@@ -415,20 +407,12 @@ function hairFrontR(r: Ras, fx: number, headY: number, style: HairStyle | undefi
 // where it leaves the sleeve. `side` is which side of the body the hand is
 // on (-1 = screen left); `grip` adds the crease of a closed fist.
 function handR(r: Ras, x: number, y: number, skin: [number, number, number], side: -1 | 1 = 1, grip = false): void {
-  r.ellipse(x, y, 1.9, 2.2, skin[0], skin[1], skin[2]);
+  r.ellipse(x, y, 2.2, 2.5, skin[0], skin[1], skin[2]);
   r.ellipse(x - side * 0.6, y + 0.4, 0.8, 1.1, skin[0] * 0.94, skin[1] * 0.94, skin[2] * 0.94);
   r.px(x - 0.8, y - 1.4, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
   r.px(x + 0.6, y - 1.4, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
   r.px(x, y - 2.4, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6); // wrist shadow
   if (grip) r.line(x - 1, y + 0.2, x + 1, y + 0.6, 0.5, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
-}
-
-// Street dirt — a stipple of mud worked into the cloth above the hem.
-function grimeR(r: Ras, hemL: number, hemR: number, hemY: number, seed: number, c: [number, number, number]): void {
-  const grr = rng(seed);
-  for (let x = hemL + 2; x < hemR - 2; x += 1.5) {
-    if (grr() < 0.5) r.px(x, hemY - 1.2 - grr() * 3.6, c[0] * 0.5, c[1] * 0.5, c[2] * 0.5);
-  }
 }
 
 // A shared figure builder — a shaded robe with folds, a face with eyes and
@@ -588,17 +572,17 @@ function barrelSprite(): SpriteTex {
 
 function crateSprite(): SpriteTex {
   const s = makeSprite();
-  rect(s, 14, 26, 50, 58, 84, 60, 36);
+  rect(s, 14, 26, 50, 58, 118, 86, 50);
   // Frame
-  rect(s, 14, 26, 50, 29, 52, 36, 20);
-  rect(s, 14, 55, 50, 58, 52, 36, 20);
-  rect(s, 14, 26, 17, 58, 52, 36, 20);
-  rect(s, 47, 26, 50, 58, 52, 36, 20);
+  rect(s, 14, 26, 50, 29, 58, 40, 22);
+  rect(s, 14, 55, 50, 58, 58, 40, 22);
+  rect(s, 14, 26, 17, 58, 58, 40, 22);
+  rect(s, 47, 26, 50, 58, 58, 40, 22);
   // Diagonal brace
-  line(s, 17, 55, 47, 29, 3, 60, 42, 24);
+  line(s, 17, 55, 47, 29, 3, 70, 50, 28);
   // Slat seams and nail heads
-  line(s, 18, 38, 46, 38, 1, 66, 46, 28);
-  line(s, 18, 47, 46, 47, 1, 66, 46, 28);
+  line(s, 18, 38, 46, 38, 1, 48, 32, 18);
+  line(s, 18, 47, 46, 47, 1, 48, 32, 18);
   px(s, 16, 28, 30, 30, 34);
   px(s, 48, 28, 30, 30, 34);
   px(s, 16, 56, 30, 30, 34);
@@ -841,17 +825,17 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   const footBX = 32 + st * 4.4;
   const footBY = 59.5 - Math.max(0, -st) * 1.6 + bob * 0.3;
   const legTop = Math.min(hipY, hemY - 2);
-  r.tube(30 - st * 0.6, legTop, footAX, footAY, 3.1, d.hose[0], d.hose[1], d.hose[2]);
-  r.tube(34 + st * 0.6, legTop, footBX, footBY, 3.1, d.hose[0], d.hose[1], d.hose[2]);
+  r.tube(30 - st * 0.6, legTop, footAX, footAY, 3.7, d.hose[0], d.hose[1], d.hose[2]);
+  r.tube(34 + st * 0.6, legTop, footBX, footBY, 3.7, d.hose[0], d.hose[1], d.hose[2]);
   // Knee shadow where the hose creases in the stride.
   r.px(30 - st * 0.6 + st * 1.8, (legTop + footAY) * 0.55, d.hose[0] * 0.6, d.hose[1] * 0.6, d.hose[2] * 0.6);
   r.px(34 + st * 0.6 - st * 1.8, (legTop + footBY) * 0.55, d.hose[0] * 0.6, d.hose[1] * 0.6, d.hose[2] * 0.6);
   // Turned-down boot cuffs, then the boot proper — chunky leather, not a
   // slipper.
-  r.ellipse(footAX, footAY - 2.2, 2.1, 1.6, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7);
-  r.ellipse(footBX, footBY - 2.2, 2.1, 1.6, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7);
-  r.ellipse(footAX, footAY + 0.4, 3.4, 2.3, d.shoe[0], d.shoe[1], d.shoe[2]);
-  r.ellipse(footBX, footBY + 0.4, 3.4, 2.3, d.shoe[0], d.shoe[1], d.shoe[2]);
+  r.ellipse(footAX, footAY - 2.2, 2.5, 1.8, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7);
+  r.ellipse(footBX, footBY - 2.2, 2.5, 1.8, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7);
+  r.ellipse(footAX, footAY + 0.4, 3.9, 2.6, d.shoe[0], d.shoe[1], d.shoe[2]);
+  r.ellipse(footBX, footBY + 0.4, 3.9, 2.6, d.shoe[0], d.shoe[1], d.shoe[2]);
 
   // Arms — hanging at the sides, swinging against the stride.
   const sleeve: [number, number, number] = [R * 0.8, G * 0.8, B * 0.8];
@@ -861,22 +845,22 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   const elbows: [number, number][] = [];
   if (d.arms === "folded") {
     // Hands folded at the waist — no swing.
-    r.tube(26.5 + sway * 0.4, shoulderY + 2, 30.5, 44 + bob, 3.2, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(37.5 + sway * 0.4, shoulderY + 2, 33.5, 44 + bob, 3.2, sleeve[0], sleeve[1], sleeve[2]);
-    elbows.push([(26.5 + sway * 0.4 + 30.5) / 2, (shoulderY + 46 + bob) / 2], [(37.5 + sway * 0.4 + 33.5) / 2, (shoulderY + 46 + bob) / 2]);
+    r.tube(25 + sway * 0.4, shoulderY + 2, 30.5, 44 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(39 + sway * 0.4, shoulderY + 2, 33.5, 44 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
+    elbows.push([(25 + sway * 0.4 + 30.5) / 2, (shoulderY + 46 + bob) / 2], [(39 + sway * 0.4 + 33.5) / 2, (shoulderY + 46 + bob) / 2]);
     handR(r, 31, 45 + bob, skin, -1);
     handR(r, 33, 45 + bob, skin, 1);
   } else if (d.bareArms) {
     // Rolled sleeves — cloth to the elbow, bare forearm below.
-    r.tube(26.5 + sway * 0.4, shoulderY + 2, 26 + st * 1.8, 40 + bob, 3.2, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(37.5 + sway * 0.4, shoulderY + 2, 38 - st * 1.8, 40 + bob, 3.2, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(26 + st * 1.8, 40 + bob, handAX, handY, 2.4, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
-    r.tube(38 - st * 1.8, 40 + bob, handBX, handY, 2.4, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
+    r.tube(25 + sway * 0.4, shoulderY + 2, 26 + st * 1.8, 40 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(39 + sway * 0.4, shoulderY + 2, 38 - st * 1.8, 40 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(26 + st * 1.8, 40 + bob, handAX, handY, 2.8, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
+    r.tube(38 - st * 1.8, 40 + bob, handBX, handY, 2.8, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
     elbows.push([26 + st * 1.8, 40 + bob], [38 - st * 1.8, 40 + bob]);
   } else {
-    r.tube(26.5 + sway * 0.4, shoulderY + 2, handAX, handY, 3.4, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(37.5 + sway * 0.4, shoulderY + 2, handBX, handY, 3.4, sleeve[0], sleeve[1], sleeve[2]);
-    elbows.push([(26.5 + sway * 0.4 + handAX) / 2, (shoulderY + 2 + handY) / 2], [(37.5 + sway * 0.4 + handBX) / 2, (shoulderY + 2 + handY) / 2]);
+    r.tube(25 + sway * 0.4, shoulderY + 2, handAX, handY, 4.0, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(39 + sway * 0.4, shoulderY + 2, handBX, handY, 4.0, sleeve[0], sleeve[1], sleeve[2]);
+    elbows.push([(25 + sway * 0.4 + handAX) / 2, (shoulderY + 2 + handY) / 2], [(39 + sway * 0.4 + handBX) / 2, (shoulderY + 2 + handY) / 2]);
   }
 
   // Robe — a trapezoid whose hem swings with the stride. Ragged cloth gets
@@ -886,8 +870,8 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   if (d.ragged) {
     r.shadedPoly(
       [
-        [26.5 + sway * 0.3, shoulderY],
-        [37.5 + sway * 0.3, shoulderY],
+        [25 + sway * 0.3, shoulderY],
+        [39 + sway * 0.3, shoulderY],
         [hemR, hemY - st * 0.6],
         [hemR - 4, hemY - 1.8 - st * 0.5],
         [hemR - 9, hemY + 0.5 - st * 0.5],
@@ -901,8 +885,8 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   } else {
     r.shadedPoly(
       [
-        [26.5 + sway * 0.3, shoulderY],
-        [37.5 + sway * 0.3, shoulderY],
+        [25 + sway * 0.3, shoulderY],
+        [39 + sway * 0.3, shoulderY],
         [hemR, hemY - st * 0.6],
         [hemL, hemY + st * 0.6],
       ],
@@ -921,27 +905,22 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
     for (let x = hemL + 3; x <= hemR - 3; x += 2.2)
       r.px(x, hemY - 2.6 + Math.sin(x) * 0.4, R * 1.28, G * 1.28, B * 1.28);
   }
-  // Mud stippled into the cloth above the hem — nobody's hem is clean.
-  grimeR(r, hemL, hemR, hemY, variant * 31 + 7, [R, G, B]);
   // The layered torso — a bodice over the chest and a linen chemise at the
   // throat, so the figure reads as dressed, not draped.
   r.poly(
     [
-      [27.5 + sway * 0.3, shoulderY + 1],
-      [36.5 + sway * 0.3, shoulderY + 1],
-      [37.5 + sway * 0.4, 43.5 + bob],
-      [26.5 + sway * 0.4, 43.5 + bob],
+      [26 + sway * 0.3, shoulderY + 1],
+      [38 + sway * 0.3, shoulderY + 1],
+      [39 + sway * 0.4, 43.5 + bob],
+      [25 + sway * 0.4, 43.5 + bob],
     ],
     R * 0.74, G * 0.74, B * 0.74
   );
   r.line(32 + sway * 0.35, shoulderY + 1.5, 32.1 + sway * 0.35, 43 + bob, 0.5, R * 0.55, G * 0.55, B * 0.55); // bodice opening
-  r.px(30.5 + sway * 0.35, 36 + bob, R * 1.2, G * 1.2, B * 1.2); // a lace
-  r.px(33.5 + sway * 0.35, 38.5 + bob, R * 1.2, G * 1.2, B * 1.2);
-  r.px(30.7 + sway * 0.35, 40.5 + bob, R * 1.2, G * 1.2, B * 1.2);
   r.poly(
     [
-      [29.5 + sway * 0.35, shoulderY + 0.2],
-      [34.5 + sway * 0.35, shoulderY + 0.2],
+      [29 + sway * 0.35, shoulderY + 0.2],
+      [35 + sway * 0.35, shoulderY + 0.2],
       [33 + sway * 0.35, shoulderY + 3],
       [31 + sway * 0.35, shoulderY + 3],
     ],
@@ -951,8 +930,8 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   // figure out of the dark street.
   r.line(26.8 + sway * 0.35, shoulderY + 2, hemL + 1.5, hemY - 2, 0.55, R * 1.3, G * 1.3, B * 1.3);
   // Sleeve caps — rounded shoulders wider than the robe's chest line.
-  r.ellipse(26 + sway * 0.35, shoulderY + 2.8, 2.8, 2.9, sleeve[0], sleeve[1], sleeve[2]);
-  r.ellipse(38 + sway * 0.35, shoulderY + 2.8, 2.8, 2.9, sleeve[0], sleeve[1], sleeve[2]);
+  r.ellipse(24.6 + sway * 0.35, shoulderY + 2.8, 3.2, 3.2, sleeve[0], sleeve[1], sleeve[2]);
+  r.ellipse(39.4 + sway * 0.35, shoulderY + 2.8, 3.2, 3.2, sleeve[0], sleeve[1], sleeve[2]);
   // Shoulder seams where the sleeves are set in.
   r.line(26.8 + sway * 0.3, shoulderY + 0.5, 29 + sway * 0.35, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62);
   r.line(37.2 + sway * 0.3, shoulderY + 0.5, 35 + sway * 0.35, shoulderY + 4, 0.6, R * 0.62, G * 0.62, B * 0.62);
@@ -987,9 +966,9 @@ function villagerRig(r: Ras, phase: number, variant: number): void {
   // laid under and over it.
   r.rect(fx - 1.7, headY + 3.8, fx + 1.7, shoulderY + 0.5, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
   r.rect(fx - 1.7, headY + 3.8, fx, shoulderY + 0.5, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
-  hairR(r, fx, headY, shoulderY, d.hair, d.hairColor, 0.92);
-  grimFaceR(r, fx, headY, skin, 0.92, d.beard ?? false, d.hairColor ?? null, variant);
-  hairFrontR(r, fx, headY, d.hair, d.hairColor, 0.92, variant);
+  hairR(r, fx, headY, shoulderY, d.hair, d.hairColor, 1.0);
+  grimFaceR(r, fx, headY, skin, 1.0, d.beard ?? false, d.hairColor ?? null, variant);
+  hairFrontR(r, fx, headY, d.hair, d.hairColor, 1.0);
 
   // The dressing — headgear and whatever they're carrying.
   switch (variant) {
@@ -1172,12 +1151,12 @@ function standRig(r: Ras, p: number, d: Dress): void {
 
   // Legs planted, hose under the hem.
   const legTop = Math.min(hipY, hemY - 2);
-  r.tube(30, legTop, 29.5, 59.5, 3.1, d.hose[0], d.hose[1], d.hose[2]);
-  r.tube(34, legTop, 34.5, 59.5, 3.1, d.hose[0], d.hose[1], d.hose[2]);
-  r.ellipse(29.5, 57.9, 2.1, 1.6, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7); // boot cuffs
-  r.ellipse(34.5, 57.9, 2.1, 1.6, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7);
-  r.ellipse(29.5, 60, 3.5, 2.2, d.shoe[0], d.shoe[1], d.shoe[2]);
-  r.ellipse(34.5, 60, 3.5, 2.2, d.shoe[0], d.shoe[1], d.shoe[2]);
+  r.tube(30, legTop, 29.5, 59.5, 3.7, d.hose[0], d.hose[1], d.hose[2]);
+  r.tube(34, legTop, 34.5, 59.5, 3.7, d.hose[0], d.hose[1], d.hose[2]);
+  r.ellipse(29.5, 57.9, 2.5, 1.8, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7); // boot cuffs
+  r.ellipse(34.5, 57.9, 2.5, 1.8, d.shoe[0] * 0.7, d.shoe[1] * 0.7, d.shoe[2] * 0.7);
+  r.ellipse(29.5, 60, 3.9, 2.6, d.shoe[0], d.shoe[1], d.shoe[2]);
+  r.ellipse(34.5, 60, 3.9, 2.6, d.shoe[0], d.shoe[1], d.shoe[2]);
 
   // Arms — sleeves drawn now, hands held for after the robe so they read
   // on the silhouette.
@@ -1186,34 +1165,34 @@ function standRig(r: Ras, p: number, d: Dress): void {
   const elbows: [number, number][] = [];
   let gripR = false;
   if (d.arms === "folded") {
-    r.tube(26.5, shoulderY + 2, 30.5, 44 + bob, 3.2, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(37.5, shoulderY + 2, 33.5, 44 + bob, 3.2, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(25, shoulderY + 2, 30.5, 44 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(39, shoulderY + 2, 33.5, 44 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
     hands.push([31, 45 + bob], [33, 45 + bob]);
     elbows.push([28.5, 36 + bob], [35.5, 36 + bob]);
   } else if (d.arms === "heldR") {
     // Left arm hangs; the right bends up to grip at shoulder height.
-    r.tube(26.5, shoulderY + 2, 25.5, 46 + bob, 3, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(37.5, shoulderY + 2, 40.5, 38 + bob, 3, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(40.5, 38 + bob, 41.5, 32 + bob, 2.4, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
+    r.tube(25, shoulderY + 2, 25.5, 46 + bob, 4.0, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(39, shoulderY + 2, 40.5, 38 + bob, 4.0, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(40.5, 38 + bob, 41.5, 32 + bob, 2.8, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
     hands.push([25.5, 47 + bob], [41.5, 31.5 + bob]);
     elbows.push([26, (shoulderY + 48 + bob) / 2], [39, 35 + bob]);
     gripR = true;
   } else if (d.arms === "hug") {
     // Hugging oneself — arms crossed over the chest.
-    r.tube(26.5, shoulderY + 2, 35, 42 + bob, 2.8, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(37.5, shoulderY + 2, 29, 44 + bob, 2.8, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(25, shoulderY + 2, 35, 42 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(39, shoulderY + 2, 29, 44 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
     hands.push([35.5, 42.5 + bob], [28.5, 44.5 + bob]);
     elbows.push([30.5, 35 + bob], [33.5, 36 + bob]);
   } else if (d.bareArms) {
-    r.tube(26.5, shoulderY + 2, 26, 40 + bob, 3.2, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(37.5, shoulderY + 2, 38, 40 + bob, 3.2, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(26, 40 + bob, 25.5, 46 + bob, 2.4, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
-    r.tube(38, 40 + bob, 38.5, 46 + bob, 2.4, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
+    r.tube(25, shoulderY + 2, 26, 40 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(39, shoulderY + 2, 38, 40 + bob, 3.8, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(26, 40 + bob, 25.5, 46 + bob, 2.8, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
+    r.tube(38, 40 + bob, 38.5, 46 + bob, 2.8, skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92);
     hands.push([25.5, 47 + bob], [38.5, 47 + bob]);
     elbows.push([26, 40 + bob], [38, 40 + bob]);
   } else {
-    r.tube(26.5, shoulderY + 2, 25.5, 46 + bob, 3, sleeve[0], sleeve[1], sleeve[2]);
-    r.tube(37.5, shoulderY + 2, 38.5, 46 + bob, 3, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(25, shoulderY + 2, 25.5, 46 + bob, 4.0, sleeve[0], sleeve[1], sleeve[2]);
+    r.tube(39, shoulderY + 2, 38.5, 46 + bob, 4.0, sleeve[0], sleeve[1], sleeve[2]);
     hands.push([25.5, 47 + bob], [38.5, 47 + bob]);
     elbows.push([26, 37 + bob], [38, 37 + bob]);
   }
@@ -1224,8 +1203,8 @@ function standRig(r: Ras, p: number, d: Dress): void {
   if (d.ragged) {
     r.shadedPoly(
       [
-        [26.5, shoulderY],
-        [37.5, shoulderY],
+        [25, shoulderY],
+        [39, shoulderY],
         [hemR, hemY],
         [hemR - 4, hemY - 1.8],
         [hemR - 9, hemY + 0.5],
@@ -1237,7 +1216,7 @@ function standRig(r: Ras, p: number, d: Dress): void {
       R, G, B, 3, R | 7
     );
   } else {
-    r.shadedPoly([[26.5, shoulderY], [37.5, shoulderY], [hemR, hemY], [hemL, hemY]], R, G, B, 3, R | 7);
+    r.shadedPoly([[25, shoulderY], [39, shoulderY], [hemR, hemY], [hemL, hemY]], R, G, B, 3, R | 7);
   }
   r.line(30, shoulderY + 4, 28.5, hemY - 1.5, 0.8, R * 0.8, G * 0.8, B * 0.8);
   r.line(34, shoulderY + 4, 35.5, hemY - 1.5, 0.8, R * 0.8, G * 0.8, B * 0.8);
@@ -1249,18 +1228,14 @@ function standRig(r: Ras, p: number, d: Dress): void {
     r.line(hemL + 2, hemY - 1, hemR - 2, hemY - 1, 1.4, R * 0.6, G * 0.6, B * 0.6);
     for (let x = hemL + 3; x <= hemR - 3; x += 2.2) r.px(x, hemY - 2.6 + Math.sin(x) * 0.4, R * 1.28, G * 1.28, B * 1.28);
   }
-  grimeR(r, hemL, hemR, hemY, R ^ 11, [R, G, B]);
   // Layered torso — bodice, chemise at the throat, capped shoulders, a lit
   // edge down the light side.
-  r.poly([[27.5, shoulderY + 1], [36.5, shoulderY + 1], [37.5, 43.5 + bob], [26.5, 43.5 + bob]], R * 0.74, G * 0.74, B * 0.74);
+  r.poly([[26, shoulderY + 1], [38, shoulderY + 1], [39, 43.5 + bob], [25, 43.5 + bob]], R * 0.74, G * 0.74, B * 0.74);
   r.line(32, shoulderY + 1.5, 32.1, 43 + bob, 0.5, R * 0.55, G * 0.55, B * 0.55);
-  r.px(30.5, 36 + bob, R * 1.2, G * 1.2, B * 1.2);
-  r.px(33.5, 38.5 + bob, R * 1.2, G * 1.2, B * 1.2);
-  r.px(30.7, 40.5 + bob, R * 1.2, G * 1.2, B * 1.2);
-  r.poly([[29.5, shoulderY + 0.2], [34.5, shoulderY + 0.2], [33, shoulderY + 3], [31, shoulderY + 3]], 186, 174, 152);
+  r.poly([[29, shoulderY + 0.2], [35, shoulderY + 0.2], [33, shoulderY + 3], [31, shoulderY + 3]], 186, 174, 152);
   r.line(26.8, shoulderY + 2, hemL + 1.5, hemY - 2, 0.55, R * 1.3, G * 1.3, B * 1.3);
-  r.ellipse(26, shoulderY + 2.8, 2.8, 2.9, sleeve[0], sleeve[1], sleeve[2]);
-  r.ellipse(38, shoulderY + 2.8, 2.8, 2.9, sleeve[0], sleeve[1], sleeve[2]);
+  r.ellipse(24.6, shoulderY + 2.8, 3.2, 3.2, sleeve[0], sleeve[1], sleeve[2]);
+  r.ellipse(39.4, shoulderY + 2.8, 3.2, 3.2, sleeve[0], sleeve[1], sleeve[2]);
   if (d.patches) {
     r.rect(29, 46 + bob, 32.5, 49.5 + bob, R * 0.72, G * 0.72, B * 0.78);
     r.rect(35.5, 37 + bob, 37.5, 40 + bob, R * 0.62, G * 0.62, B * 0.68);
@@ -1286,9 +1261,9 @@ function standRig(r: Ras, p: number, d: Dress): void {
   // Neck and head — the same grim face the crowd wears, hair under/over.
   r.rect(fx - 1.7, headY + 3.8, fx + 1.7, shoulderY + 0.5, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
   r.rect(fx - 1.7, headY + 3.8, fx, shoulderY + 0.5, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
-  hairR(r, fx, headY, shoulderY, d.hair, d.hairColor, 0.92);
-  grimFaceR(r, fx, headY, skin, 0.92, d.beard ?? false, d.hairColor ?? null, (d.hose[0] | 0) + 11);
-  hairFrontR(r, fx, headY, d.hair, d.hairColor, 0.92, (d.hose[0] | 0) + 11);
+  hairR(r, fx, headY, shoulderY, d.hair, d.hairColor, 1.0);
+  grimFaceR(r, fx, headY, skin, 1.0, d.beard ?? false, d.hairColor ?? null, (d.hose[0] | 0) + 11);
+  hairFrontR(r, fx, headY, d.hair, d.hairColor, 1.0);
 }
 
 // Named NPCs idle — two breathing frames each.
@@ -1470,21 +1445,21 @@ function guardRig(r: Ras, phase: number): void {
   const fx = 32 + sway * 0.5;
 
   // Feet planted wide — posted, not walking.
-  r.tube(30, 51 + bob, 29.5 + sway * 0.4, 59.5, 3.1, 40, 44, 50);
-  r.tube(34, 51 + bob, 34.5 + sway * 0.4, 59.5, 3.1, 40, 44, 50);
-  r.ellipse(29 + sway * 0.4, 60, 3.4, 1.9, 30, 26, 22);
-  r.ellipse(35 + sway * 0.4, 60, 3.4, 1.9, 30, 26, 22);
+  r.tube(30, 51 + bob, 29.5 + sway * 0.4, 59.5, 3.7, 40, 44, 50);
+  r.tube(34, 51 + bob, 34.5 + sway * 0.4, 59.5, 3.7, 40, 44, 50);
+  r.ellipse(29 + sway * 0.4, 60, 3.9, 2.6, 30, 26, 22);
+  r.ellipse(35 + sway * 0.4, 60, 3.9, 2.6, 30, 26, 22);
 
   // Sleeves — the right hand grips the halberd shaft.
   const sleeve: [number, number, number] = [tabard[0] * 0.8, tabard[1] * 0.8, tabard[2] * 0.8];
-  r.tube(26.5 + sway * 0.3, shoulderY + 2, 25 + sway * 0.5, 46 + bob, 3, sleeve[0], sleeve[1], sleeve[2]);
-  r.tube(37.5 + sway * 0.3, shoulderY + 2, 42.5 + sway * 0.5, 42 + bob, 3, sleeve[0], sleeve[1], sleeve[2]);
+  r.tube(25 + sway * 0.3, shoulderY + 2, 25 + sway * 0.5, 46 + bob, 4.0, sleeve[0], sleeve[1], sleeve[2]);
+  r.tube(39 + sway * 0.3, shoulderY + 2, 42.5 + sway * 0.5, 42 + bob, 4.0, sleeve[0], sleeve[1], sleeve[2]);
 
   // Tabard — squared shoulders, a straighter cut than the citizens' robes.
   r.shadedPoly(
     [
-      [26 + sway * 0.3, shoulderY],
-      [38 + sway * 0.3, shoulderY],
+      [24.5 + sway * 0.3, shoulderY],
+      [39.5 + sway * 0.3, shoulderY],
       [42.5 + sway * 0.5, hemY],
       [21.5 + sway * 0.5, hemY],
     ],
