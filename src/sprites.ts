@@ -8,8 +8,8 @@ import type { SpriteTex, Texture, TextureSet, ModelPart } from "./types";
 // coordinates by s.w / TEX_SIZE, so old sprites render unchanged as solid
 // blocks while new work can place fractional coordinates for finer detail.
 
-const SPRITE_RES = 2;                          // bitmap resolution vs TEX_SIZE
-const SPRITE_PX = TEX_SIZE * SPRITE_RES;       // 128 — the sprite bitmap size
+const SPRITE_RES = 4;                          // bitmap resolution vs TEX_SIZE
+const SPRITE_PX = TEX_SIZE * SPRITE_RES;       // 256 — the sprite bitmap size
 
 function makeSprite(px = SPRITE_PX): SpriteTex {
   return { w: px, h: px, data: new Uint8Array(px * px * 4) };
@@ -124,10 +124,29 @@ function form(s: SpriteTex): void {
   }
 }
 
-// The finishing pass applied to every solid sprite — volume, then outline.
+// Fine grain woven into the art at bitmap scale — it only reads at high
+// sprite resolutions, where it breaks up the flat fields into cloth and hide.
+// Deterministic per-pixel hash, so it costs no rng state.
+function grain(s: SpriteTex): void {
+  const { w, h, data } = s;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (data[i + 3] < 128) continue;
+      const n = (((x * 73856093) ^ (y * 19349663)) >>> 0) / 4294967296 - 0.5;
+      const f = 1 + n * 0.1;
+      data[i] *= f;
+      data[i + 1] *= f;
+      data[i + 2] *= f;
+    }
+  }
+}
+
+// The finishing pass applied to every solid sprite — volume, grain, outline.
 // Flame and glow sprites skip it: dark rims would kill the bloom.
 function finish(s: SpriteTex): SpriteTex {
   form(s);
+  grain(s);
   edge(s);
   return s;
 }
