@@ -781,10 +781,12 @@ const SPRITES: SpriteDef[] = [
   { kind: "torch", x: 74.5, y: 21.4 },
   { kind: "torch", x: 86.5, y: 22.6 },
   { kind: "cart", x: 66.5, y: 22.6, search: "cart_timber", examine: "the bodies' cart" },
-  { kind: "deadStall", x: 70.5, y: 22.5 },
-  { kind: "deadStall", x: 72.7, y: 21.65 },
-  { kind: "deadStall", x: 82.5, y: 22.4 },
-  { kind: "deadStall", x: 80.7, y: 21.7, rot: -1.5708 },
+  // The old town market — dead stalls left standing in the open ground
+  // by the grate alley, where the quarter last traded.
+  { kind: "deadStall", x: 68.4, y: 31.8 },
+  { kind: "deadStall", x: 74.0, y: 31.8 },
+  { kind: "deadStall", x: 70.0, y: 34.3 },
+  { kind: "deadStall", x: 73.4, y: 34.3 },
   // The marquee — cots under canvas, the slab, Marguerite's vigil
   { kind: "bed", x: 65.6, y: 13.5, rot: 1.5708 },
   { kind: "bed", x: 69.5, y: 13.5, rot: 1.5708 },
