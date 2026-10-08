@@ -1,4 +1,5 @@
 import {
+  EYE_H,
   GRAIN_AMOUNT,
   HEARTH_GLOW,
   HEARTH_WARM,
@@ -203,7 +204,8 @@ export class Renderer {
       const p = y - horizon;
       if (Math.abs(p) < 0.6) continue; // horizon line itself
       const isFloor = p > 0;
-      const rowDist = (0.5 * H) / Math.abs(p);
+      // The floor is EYE_H below the eye, the storey ceiling (1 - EYE_H) above.
+      const rowDist = ((isFloor ? EYE_H : 1 - EYE_H) * H) / Math.abs(p);
 
       const stepX = (rowDist * (rrX - rlX)) / W;
       const stepY = (rowDist * (rrY - rlY)) / W;
@@ -229,7 +231,7 @@ export class Renderer {
             // default z=1 crossing overshoots it, so resample the landing
             // at the room's own height. Over a marquee's walls this moves
             // the hit back outside and the roofline seals shut.
-            const k = (map.ceilH[cell] - 0.5) / 0.5;
+            const k = (map.ceilH[cell] - EYE_H) / (1 - EYE_H);
             sx = player.x + (fx - player.x) * k;
             sy = player.y + (fy - player.y) * k;
             cx = Math.floor(sx);
@@ -457,7 +459,7 @@ export class Renderer {
 
         // Wall bottom sits on the floor plane; the column rises `cellH` storeys.
         const perpH = H / Math.max(perp, 0.001);
-        const wallBottom = horizon + perpH * 0.5;
+        const wallBottom = horizon + perpH * EYE_H;
         const y1 = Math.min(H - 1, Math.floor(wallBottom));
 
         // The air cell in front of this face tells us whether we're looking at
@@ -580,7 +582,7 @@ export class Renderer {
     const cellH = map.wallH[openIdx];
     if (cellH <= 1) return; // nothing spans a one-storey opening
     const perpH = H / openPerp;
-    const bottom = horizon + perpH * 0.5;
+    const bottom = horizon + perpH * EYE_H;
     const top = bottom - perpH * cellH;
     const yTop = Math.max(0, Math.ceil(top));
     const yBot = Math.min(H - 1, Math.floor(bottom));
@@ -703,7 +705,7 @@ export class Renderer {
     for (const p of near) {
       for (const f of p.faces) {
         if (!f.flat) continue;
-        const dz = 0.5 - f.top; // the eye rides half a storey up
+        const dz = EYE_H - f.top; // the eye rides EYE_H of a storey up
         if (Math.abs(dz) <= 0.02) continue; // a plane at eye level is a line
         const adz = Math.abs(dz);
         const below = dz > 0; // lids vs undersides — a marquee roof is the latter
@@ -799,7 +801,7 @@ export class Renderer {
       for (const hit of hits) {
         const f = hit.f;
         const perpH = H / hit.t;
-        const floorY = horizon + perpH * 0.5;
+        const floorY = horizon + perpH * EYE_H;
         const yTop = Math.max(0, Math.ceil(floorY - perpH * f.top));
         let yBot = Math.min(H - 1, Math.floor(floorY - perpH * f.base));
         // Behind the wall depth a face only owns the rows above the wall's
@@ -941,7 +943,7 @@ export class Renderer {
 
         const perpH = H / hit;
         // Anchor the sprite's feet on the floor at its depth.
-        const groundY = horizon + perpH * 0.5;
+        const groundY = horizon + perpH * EYE_H;
         const sprH = perpH * s.scale;
         const yTop = Math.max(0, Math.ceil(groundY - sprH));
         let yBot = Math.min(H - 1, Math.floor(groundY));
@@ -981,9 +983,10 @@ export class Renderer {
   ): void {
     this.ctx.imageSmoothingEnabled = false;
     if (!lantern) return;
-    const scale = 3.15;
-    const dw = lantern.width * scale;
-    const dh = lantern.height * scale;
+    // Size in screen pixels regardless of the bitmap's resolution — the
+    // lantern should fill about a third of the view's height.
+    const dh = H * 0.36;
+    const dw = dh * (lantern.width / lantern.height);
     const x0 = W * 0.3 - swayX - dw / 2;
     const y0 = H - dh * 0.82 + swayY;
     this.ctx.drawImage(lantern, Math.round(x0), Math.round(y0), Math.round(dw), Math.round(dh));
