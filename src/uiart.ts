@@ -119,46 +119,51 @@ export function silhouettePix(w = 192, h = 256): SpriteTex {
   const black: RGB = [6, 5, 8];
   const dim: RGB = [22, 18, 24];
   const warm: RGB = [60, 48, 30];
-  const cx = w * 0.52; // chest-up centre, face turned left
-  const headY = h * 0.36;
+  // One continuous contour, filled once — a silhouette is a single shape,
+  // not a stack of parts. Clockwise from the top of the crown; the figure
+  // faces left in three-quarter, chest up, cloak running off the bottom.
+  const P = (x: number, y: number): [number, number] => [Math.round(x * w), Math.round(y * h)];
+  const contour: [number, number][] = [
+    // crown — a soft dome, slightly dented
+    P(0.40, 0.13), P(0.47, 0.11), P(0.55, 0.12), P(0.61, 0.15), P(0.63, 0.21), P(0.63, 0.245),
+    // brim, right wing — a long shallow sweep with a lifted tip
+    P(0.74, 0.25), P(0.84, 0.25), P(0.91, 0.248), P(0.93, 0.258), P(0.93, 0.272), P(0.89, 0.285), P(0.80, 0.295), P(0.70, 0.30),
+    // down the back of the head and neck into the collar
+    P(0.665, 0.31), P(0.67, 0.37), P(0.65, 0.42), P(0.70, 0.44),
+    // right shoulder and cloak edge sweeping out of frame
+    P(0.80, 0.49), P(0.89, 0.57), P(0.95, 0.70), P(0.98, 0.86), P(0.99, 1.0),
+    P(0.01, 1.0),
+    // left cloak edge up to the shoulder
+    P(0.03, 0.84), P(0.06, 0.70), P(0.12, 0.58), P(0.19, 0.51),
+    // collar front, raised against the jaw
+    P(0.29, 0.465), P(0.35, 0.445), P(0.40, 0.445),
+    // under the beak back to its tip
+    P(0.38, 0.425), P(0.26, 0.45), P(0.14, 0.475), P(0.08, 0.485), P(0.07, 0.47),
+    // beak upper edge rising to the brow
+    P(0.16, 0.44), P(0.27, 0.395), P(0.36, 0.345), P(0.405, 0.315),
+    // brim, left wing — underside then tip then top edge back to the crown
+    P(0.30, 0.31), P(0.18, 0.30), P(0.09, 0.285), P(0.06, 0.272), P(0.06, 0.258), P(0.09, 0.248), P(0.18, 0.25), P(0.30, 0.25), P(0.37, 0.245),
+    P(0.37, 0.21), P(0.38, 0.16),
+  ];
+  p.poly(contour, black);
 
-  // Cloak shoulders — a broad black mass filling the bottom.
-  p.poly(
-    [[cx - w * 0.46, h], [cx - w * 0.4, h * 0.62], [cx - w * 0.22, h * 0.5], [cx + w * 0.18, h * 0.5], [cx + w * 0.42, h * 0.62], [cx + w * 0.46, h]],
-    black
-  );
-  // High collar.
-  p.poly([[cx - w * 0.14, h * 0.52], [cx - w * 0.1, h * 0.42], [cx + w * 0.12, h * 0.42], [cx + w * 0.16, h * 0.52]], black);
-
-  // Head mass — the masked face in profile-ish three-quarter.
-  p.ellipse(cx - w * 0.02, headY, w * 0.075, h * 0.062, black);
-  // The beak — a long taper pointing left-down.
-  p.poly(
-    [[cx - w * 0.09, headY - h * 0.01], [cx - w * 0.30, headY + h * 0.06], [cx - w * 0.32, headY + h * 0.075], [cx - w * 0.08, headY + h * 0.045]],
-    black
-  );
-  // Wide-brimmed hat — brim 150px wide, low crown.
-  const brimY = headY - h * 0.085;
-  p.ellipse(cx, brimY, w * 0.39, h * 0.028, black); // 150px brim
-  p.ellipse(cx, brimY - h * 0.045, w * 0.13, h * 0.05, black); // crown
-  p.rect(cx - w * 0.12, brimY - h * 0.02, cx + w * 0.12, brimY - h * 0.008, black); // hat band zone
-
-  // Interior highlights — barely-there tones along edges.
-  // hat brim top edge
-  for (let x = Math.round(cx - w * 0.3); x < cx + w * 0.1; x++) {
-    const dx = (x - cx) / (w * 0.39);
-    if (dx * dx < 0.8) p.set(x, Math.round(brimY - h * 0.028 * Math.sqrt(1 - dx * dx)), dim);
-  }
-  // beak ridge
-  p.thickLine(cx - w * 0.28, headY + h * 0.052, cx - w * 0.1, headY - h * 0.005, 2, dim);
-  // collar fold
-  p.thickLine(cx - w * 0.1, h * 0.44, cx - w * 0.13, h * 0.52, 2, dim);
-  p.thickLine(cx + w * 0.3, h * 0.58, cx + w * 0.4, h * 0.62, 2, dim); // shoulder edge
+  // Interior tones — the barest rim of light where the moon catches an edge.
+  // A 2px line just inside the contour along the lit (upper-left) edges.
+  const edge = (a: [number, number], b: [number, number], c: RGB = dim): void => p.thickLine(a[0], a[1], b[0], b[1], 2, c);
+  edge(P(0.41, 0.145), P(0.54, 0.13)); // crown top
+  edge(P(0.09, 0.26), P(0.36, 0.258)); // brim top, left wing
+  edge(P(0.64, 0.258), P(0.90, 0.26)); // brim top, right wing
+  edge(P(0.10, 0.472), P(0.39, 0.33)); // beak ridge
+  edge(P(0.30, 0.475), P(0.40, 0.455)); // collar lip
+  edge(P(0.20, 0.52), P(0.13, 0.59)); // left shoulder fold
+  edge(P(0.07, 0.72), P(0.045, 0.86), [14, 12, 16]); // cloak edge, barely
+  // Hat band — a darker-than-black line where the band sits.
+  p.thickLine(P(0.38, 0.235)[0], P(0.38, 0.235)[1], P(0.63, 0.235)[0], P(0.63, 0.235)[1], 2, [2, 2, 3]);
 
   // The goggle lens — one amber disc with a dark rim and a catch-light.
-  const lx = Math.round(cx - w * 0.03), ly = Math.round(headY - h * 0.005);
-  p.ellipse(lx, ly, 5, 5, [40, 28, 16]); // dark rim
-  p.ellipse(lx, ly, 3.5, 3.5, [200, 140, 50]); // amber glass
+  const [lx, ly] = P(0.47, 0.345);
+  p.ellipse(lx, ly, 6, 6, [40, 28, 16]); // dark rim
+  p.ellipse(lx, ly, 4, 4, [200, 140, 50]); // amber glass
   p.rect(lx - 2, ly - 2, lx - 1, ly - 1, warm); // catch-light
   p.set(lx - 2, ly - 2, [240, 200, 120]);
 
