@@ -1,4 +1,6 @@
 import "./style.css";
+import "@fontsource/jacquard-24";
+import "@fontsource/pixelify-sans/500.css";
 import {
   AMBIENT_DAY,
   AMBIENT_NIGHT,
@@ -17,6 +19,7 @@ import {
 import { describeTime, initHud } from "./hud";
 import { consumePress, initInput, isDown, isLocked } from "./input";
 import { initCityMap } from "./citymap";
+import { applyFrame } from "./uiart";
 import { findInteraction } from "./interact";
 import { craft, makeInventory, RECIPES, useItem } from "./inventory";
 import { ITEMS } from "./items";
@@ -327,6 +330,7 @@ const menu = initMenu(display, () => {
 let mapOpen = false;
 const mapEl = document.getElementById("citymap")!;
 const citymap = initCityMap(map);
+applyFrame(citymap.canvas, "iron");
 mapEl.appendChild(citymap.canvas);
 
 // The pack — Tab opens it, releasing the mouse so items can be clicked.

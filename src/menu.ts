@@ -11,7 +11,7 @@ import {
   saveSettings,
   settings,
 } from "./settings";
-import { lancet, roseWindow, tracery } from "./ornaments";
+import { doctorSilhouette } from "./uiart";
 import type { Action } from "./settings";
 
 export interface Menu {
@@ -63,32 +63,30 @@ export function initMenu(display: HTMLCanvasElement, onDescend: () => void): Men
   }
   requestAnimationFrame(moteTick);
 
+  // The Pale Coins layout — a left text column and a flat amber moon on the
+  // right, the plague doctor's silhouette cutting across its lower edge.
   const panel = document.createElement("div");
   panel.className = "panel";
-  // The west facade behind the title — two lancet windows and the great
-  // rose turning slowly in the dark.
-  const rose = roseWindow(210);
-  rose.className = "title-rose";
-  const lancetL = lancet(108, 400, 11);
-  lancetL.className = "lancet left";
-  const lancetR = lancet(108, 400, 19);
-  lancetR.className = "lancet right";
   const title = document.createElement("h1");
   title.textContent = "PLAGUE HUNT";
-  const rule = document.createElement("div");
-  rule.className = "rule";
-  rule.textContent = "⸻";
   const sub = document.createElement("p");
   sub.className = "sub";
   sub.textContent = "paris · anno domini 1348 · you are the plague doctor";
-  const band = tracery(360, 17);
-  band.className = "title-tracery";
-  panel.append(rose, title, rule, sub, band);
+  panel.append(title, sub);
   const pages = document.createElement("div");
   panel.appendChild(pages);
+
+  const moon = document.createElement("div");
+  moon.className = "moon";
+  const doctor = doctorSilhouette(192, 256);
+  doctor.className = "doctor";
+  const version = document.createElement("div");
+  version.className = "version";
+  version.textContent = "plague hunt — dev build";
+
   root.innerHTML = "";
   root.appendChild(motes);
-  root.append(lancetL, lancetR, panel);
+  root.append(moon, doctor, panel, version);
 
   // --- main page ------------------------------------------------------------
 

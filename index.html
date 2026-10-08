@@ -8,18 +8,25 @@
   <body>
     <canvas id="game"></canvas>
     <div id="hud">
-      <div id="clock"></div>
-      <canvas id="compass" width="360" height="30"></canvas>
       <div id="quest"></div>
       <div id="dialog"></div>
-      <div id="inv"></div>
       <div id="reticle"></div>
       <div id="prompt"></div>
-      <div id="bars">
-        <div class="bar"><div class="track"><div id="bar-health" class="fill health"></div></div><span>health</span></div>
-        <div class="bar"><div class="track"><div id="bar-hunger" class="fill hunger"></div></div><span>hunger</span></div>
-        <div class="bar"><div class="track"><div id="bar-thirst" class="fill thirst"></div></div><span>thirst</span></div>
-        <div class="bar"><div class="track"><div id="bar-fatigue" class="fill fatigue"></div></div><span>fatigue</span></div>
+      <div id="bottombar">
+        <div id="bars">
+          <div class="bar"><span class="bicon" id="icon-health"></span><div class="track"><div id="bar-health" class="fill health"></div></div><span class="blabel">health</span></div>
+          <div class="bar"><span class="bicon" id="icon-hunger"></span><div class="track"><div id="bar-hunger" class="fill hunger"></div></div><span class="blabel">hunger</span></div>
+          <div class="bar"><span class="bicon" id="icon-thirst"></span><div class="track"><div id="bar-thirst" class="fill thirst"></div></div><span class="blabel">thirst</span></div>
+          <div class="bar"><span class="bicon" id="icon-fatigue"></span><div class="track"><div id="bar-fatigue" class="fill fatigue"></div></div><span class="blabel">fatigue</span></div>
+        </div>
+        <div id="centre">
+          <div id="emblem"></div>
+          <div id="inv"></div>
+        </div>
+        <div id="rightzone">
+          <div id="clock"></div>
+          <canvas id="compass" width="360" height="30"></canvas>
+        </div>
       </div>
       <div id="damage"></div>
     </div>

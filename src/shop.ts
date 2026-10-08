@@ -6,7 +6,7 @@ import { ITEMS, SHOPS } from "./items";
 import { count } from "./inventory";
 import type { Inventory } from "./inventory";
 import type { SpriteTex } from "./types";
-import { adornPanel } from "./ornaments";
+import { applyFrame } from "./uiart";
 
 const SHOP_NAMES: Record<string, string> = {
   baker: "baker colin's stall",
@@ -41,8 +41,8 @@ export function initShop(
     if (!inv) return;
     el.innerHTML = "";
     const box = document.createElement("div");
-    box.className = "shoppanel";
-    adornPanel(box);
+    box.className = "shoppanel panel-px";
+    applyFrame(box, "bronze");
     el.appendChild(box);
 
     const head = document.createElement("h2");

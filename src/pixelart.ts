@@ -23,12 +23,19 @@ export function ramp(base: RGB): Ramp {
 }
 
 export class Pix {
-  data = new Uint8ClampedArray(PIX * PIX * 4);
+  readonly w: number;
+  readonly h: number;
+  data: Uint8ClampedArray;
+  constructor(w = PIX, h = PIX) {
+    this.w = w;
+    this.h = h;
+    this.data = new Uint8ClampedArray(w * h * 4);
+  }
 
   set(x: number, y: number, c: RGB): void {
     const xi = Math.round(x), yi = Math.round(y);
-    if (xi < 0 || yi < 0 || xi >= PIX || yi >= PIX) return;
-    const i = (yi * PIX + xi) * 4;
+    if (xi < 0 || yi < 0 || xi >= this.w || yi >= this.h) return;
+    const i = (yi * this.w + xi) * 4;
     this.data[i] = c[0]; this.data[i + 1] = c[1]; this.data[i + 2] = c[2]; this.data[i + 3] = 255;
   }
 
@@ -163,34 +170,34 @@ export class Pix {
   }
 
   private opaque(x: number, y: number): boolean {
-    return x >= 0 && y >= 0 && x < PIX && y < PIX && this.data[(y * PIX + x) * 4 + 3] >= 128;
+    return x >= 0 && y >= 0 && x < this.w && y < this.h && this.data[(y * this.w + x) * 4 + 3] >= 128;
   }
 
   outline(color: RGB = [12, 9, 10]): void {
     const d = this.data;
     const lum = (x: number, y: number) => {
-      const i = (y * PIX + x) * 4;
+      const i = (y * this.w + x) * 4;
       return d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
     };
-    const mark = new Uint8Array(PIX * PIX); // 1 silhouette, 2 material edge
-    for (let y = 0; y < PIX; y++) {
-      for (let x = 0; x < PIX; x++) {
+    const mark = new Uint8Array(this.w * this.h); // 1 silhouette, 2 material edge
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
         if (!this.opaque(x, y)) continue;
         if (!this.opaque(x - 1, y) || !this.opaque(x + 1, y) || !this.opaque(x, y - 1) || !this.opaque(x, y + 1)) {
-          mark[y * PIX + x] = 1;
+          mark[y * this.w + x] = 1;
           continue;
         }
         const l = lum(x, y);
         for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]] as const) {
-          if (this.opaque(x + dx, y + dy) && lum(x + dx, y + dy) - l > 55) { mark[y * PIX + x] = 2; break; }
+          if (this.opaque(x + dx, y + dy) && lum(x + dx, y + dy) - l > 55) { mark[y * this.w + x] = 2; break; }
         }
       }
     }
-    for (let y = 0; y < PIX; y++) {
-      for (let x = 0; x < PIX; x++) {
-        const m = mark[y * PIX + x];
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        const m = mark[y * this.w + x];
         if (!m) continue;
-        const i = (y * PIX + x) * 4;
+        const i = (y * this.w + x) * 4;
         if (m === 1) { d[i] = color[0]; d[i + 1] = color[1]; d[i + 2] = color[2]; }
         else { d[i] *= 0.55; d[i + 1] *= 0.55; d[i + 2] = clamp(d[i + 2] * 0.55 + 10); }
       }
@@ -198,7 +205,7 @@ export class Pix {
   }
 
   toTex(): SpriteTex {
-    return { w: PIX, h: PIX, data: new Uint8Array(this.data) };
+    return { w: this.w, h: this.h, data: new Uint8Array(this.data) };
   }
 }
 

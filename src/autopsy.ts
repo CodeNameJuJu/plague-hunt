@@ -8,7 +8,7 @@
 // the second is something else entirely.
 
 import { AUTOPSY_FINDINGS } from "./quests";
-import { adornPanel } from "./ornaments";
+import { applyFrame } from "./uiart";
 
 const SITES = [
   { name: "the head", x: 100, y: 38 },
@@ -199,8 +199,8 @@ export function initAutopsy(onDone: () => void): AutopsyPanel {
   function render(): void {
     el.innerHTML = "";
     box = document.createElement("div");
-    box.className = "autopsypanel";
-    adornPanel(box);
+    box.className = "autopsypanel panel-px";
+    applyFrame(box, "bronze");
     el.appendChild(box);
 
     const head = document.createElement("h2");
@@ -213,6 +213,7 @@ export function initAutopsy(onDone: () => void): AutopsyPanel {
       "read the body — the marks are there if you look. then cut on the line, not beside it";
     box.appendChild(sub);
 
+    applyFrame(canvas, "iron");
     box.appendChild(canvas);
     findingEl = document.createElement("p");
     findingEl.className = "finding";

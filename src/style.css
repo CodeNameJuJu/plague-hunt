@@ -218,12 +218,6 @@ body {
 }
 
 /* A permanent vignette — the world never quite reaches the screen edge. */
-#hud::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, transparent 58%, rgba(6, 3, 10, 0.5) 100%);
-}
 
 #compass {
   position: absolute;
@@ -1352,90 +1346,600 @@ body {
   scrollbar-color: #4d3d22 rgba(10, 8, 8, 0.6);
 }
 
-/* --- gothic ornaments -------------------------------------------------------
-   The Notre Dame treatment: a slowly turning rose over the title, lancet
-   windows behind it, a tracery gallery under it, and every panel wears a
-   little tracery band with a rose on its top rail. */
 
-.title-rose {
-  display: block;
-  width: 200px;
-  height: 200px;
-  margin: 0 auto 14px;
-  filter: drop-shadow(0 0 34px rgba(190, 120, 45, 0.28)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.8));
-  animation: rose-turn 140s linear infinite;
+/* ==========================================================================
+   Pixel UI — native pixel-art chrome. frame9 border-image bevels, Jacquard 24
+   headings, Pixelify Sans body, hard offset shadows, nearest-neighbour only. */
+
+body {
+  font-family: "Pixelify Sans", "Courier New", monospace;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+button,
+input {
+  font-family: "Pixelify Sans", "Courier New", monospace;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+canvas,
+img {
+  image-rendering: pixelated;
 }
 
-@keyframes rose-turn {
-  to {
-    transform: rotate(360deg);
-  }
+/* frame9 tiles — border-image source is set inline from uiart.ts */
+.f9,
+.f9i {
+  border-style: solid;
+  border-width: 8px;
+  border-image-slice: 8;
+  border-image-width: 8px;
+  border-image-repeat: repeat;
+  image-rendering: pixelated;
 }
 
-.lancet {
+/* --- title screen -------------------------------------------------------- */
+
+#overlay {
+  background: linear-gradient(#07060a, #1e1608);
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+#overlay .moon {
   position: absolute;
+  right: 6vw;
   top: 50%;
-  transform: translateY(-58%);
-  width: 108px;
-  height: 400px;
-  opacity: 0.55;
-  pointer-events: none;
-  filter: drop-shadow(0 0 26px rgba(40, 30, 60, 0.5));
+  transform: translateY(-52%);
+  width: 60vh;
+  height: 60vh;
+  border-radius: 50%;
+  background: #b07a2a;
 }
 
-.lancet.left {
-  left: 9%;
-}
-.lancet.right {
-  right: 9%;
+#overlay .doctor {
+  position: absolute;
+  right: calc(6vw + 34vh);
+  bottom: 4vh;
+  height: 56vh;
+  width: auto;
+  image-rendering: pixelated;
 }
 
-.title-tracery {
+#overlay .version {
+  position: absolute;
+  right: 16px;
+  bottom: 10px;
+  font-size: 14px;
+  color: #6a5c44;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.panel {
+  padding: 8vh 8vw;
+  text-align: left;
+  color: #cfc3a8;
+  font-family: "Pixelify Sans", "Courier New", monospace;
+  text-shadow: none;
+}
+
+.panel h1 {
+  font-family: "Jacquard 24", "Pixelify Sans", monospace;
+  font-size: 96px;
+  font-weight: normal;
+  color: #ece4d2;
+  letter-spacing: 2px;
+  text-shadow: 4px 4px 0 #000;
+  margin: 0;
+}
+
+.panel .sub {
+  font-size: 18px;
+  color: #8a7a5c;
+  text-shadow: 2px 2px 0 #000;
+  margin: 4px 0 0;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 7vh;
+}
+
+.menubtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 28px;
+  color: #cfc3a8;
+  text-align: left;
+  cursor: pointer;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.menubtn::before {
+  content: "◆ ";
+  color: transparent;
+}
+
+.menubtn:hover,
+.menubtn:focus-visible {
+  color: #f0b24a;
+  outline: none;
+}
+
+.menubtn:hover::before,
+.menubtn:focus-visible::before {
+  color: #f0b24a;
+}
+
+.menubtn.small {
+  font-size: 20px;
+  margin-top: 18px;
+}
+
+.setrow,
+.bindrow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 420px;
+  font-size: 18px;
+  color: #cfc3a8;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.setrow span,
+.bindrow span {
+  flex: 1;
+}
+
+.setrow b,
+.bindrow b {
+  color: #f0b24a;
+  font-weight: normal;
+  min-width: 44px;
+  text-align: right;
+}
+
+.setrow input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 180px;
+  height: 8px;
+  padding: 0;
+  background: #0c0a0d;
+  border: 2px solid #4a3a24;
+  box-shadow: inset 0 0 0 1px #0a0806;
+}
+
+.setrow input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 8px;
+  height: 14px;
+  background: #6a5432;
+  border: 1px solid #0a0806;
+}
+
+.setrow input[type="range"]::-moz-range-thumb {
+  width: 8px;
+  height: 14px;
+  border-radius: 0;
+  background: #6a5432;
+  border: 1px solid #0a0806;
+}
+
+.setrow input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #0c0a0d;
+  border: 2px solid #4a3a24;
+  padding: 0;
+}
+
+.setrow input[type="checkbox"]:checked {
+  background: #f0b24a;
+}
+
+.bindkey {
+  background: #141217;
+  border: 2px solid #4a4a52;
+  box-shadow: inset 1px 1px 0 #3a3a42, inset -1px -1px 0 #101014;
+  color: #ece4d2;
+  font-size: 15px;
+  padding: 2px 10px;
+  cursor: pointer;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.bindkey:hover,
+.bindkey.waiting {
+  border-color: #4a3a24;
+  color: #f0b24a;
+}
+
+.bindnote,
+.panel .dim {
+  color: #6a5c44;
+  font-size: 14px;
+}
+
+/* --- HUD: the bottom bar -------------------------------------------------- */
+
+#hud {
+  font-family: "Pixelify Sans", "Courier New", monospace;
+}
+
+#bottombar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: #0c0a0d;
+  box-shadow: inset 0 2px 0 #1a1518;
+}
+
+#bars {
+  position: static;
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 4px 18px;
+  background: none;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bar .bicon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.bar .bicon canvas {
+  width: 12px;
+  height: 12px;
   display: block;
-  width: 360px;
-  height: 17px;
-  margin: -4px auto 30px;
-  opacity: 0.9;
 }
 
-/* Panel trim — a tracery gallery band with a rose at its centre, crowning
-   the heading inside each panel. */
-.orn-head {
+.bar .blabel {
+  font-size: 13px;
+  color: #cfc3a8;
+  text-shadow: 1px 1px 0 #000;
+  text-transform: none;
+  letter-spacing: 0;
+  width: 46px;
+  order: 3;
+}
+
+.track {
+  width: 120px;
+  height: 8px;
+  padding: 0;
+  background: #080708;
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.fill {
+  height: 100%;
+  background-repeat: repeat-x;
+  background-size: 8px 100%;
+  image-rendering: pixelated;
+  transition: none;
+}
+
+.track.empty .fill {
+  opacity: 0.25;
+}
+
+#centre {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+#emblem {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+
+#emblem canvas {
+  width: 48px;
+  height: 48px;
+  display: block;
+}
+
+#inv {
+  position: static;
+  transform: none;
+  display: flex;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.slot {
   position: relative;
-  height: 28px;
-  margin: -6px -8px 2px;
-}
-
-.orn-tracery {
-  position: absolute;
-  top: 9px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 220px;
-  height: 15px;
-  pointer-events: none;
-  opacity: 0.85;
-}
-
-.orn-rose {
-  position: absolute;
-  top: -1px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 30px;
-  height: 30px;
-  pointer-events: none;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.9));
-}
-
-/* The hotbar's centre medallion, resting on the rail. */
-.hotrose {
-  position: absolute;
-  top: -24px;
-  left: 50%;
-  transform: translateX(-50%);
   width: 44px;
   height: 44px;
-  pointer-events: none;
-  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.9)) drop-shadow(0 0 18px rgba(190, 120, 45, 0.15));
+  background: #0a080a;
+  padding: 0;
+}
+
+.slot .icon {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slot .icon canvas {
+  max-width: 26px;
+  max-height: 26px;
+  width: auto;
+  height: auto;
+}
+
+.slot .key {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  font-size: 12px;
+  color: #8a7a5c;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.slot .count {
+  position: absolute;
+  bottom: 0;
+  right: 2px;
+  font-size: 12px;
+  font-weight: normal;
+  color: #ece4d2;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.slot.equip {
+  box-shadow: inset 0 0 0 2px #f0b24a;
+}
+
+.slot.empty .icon,
+.slot.empty .count {
+  opacity: 0.3;
+}
+
+#rightzone {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+#clock {
+  position: static;
+  font-size: 22px;
+  color: #f0b24a;
+  letter-spacing: 1px;
+  font-variant: normal;
+  text-shadow: 2px 2px 0 #000;
+  padding: 0;
+  background: none;
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+#compass {
+  position: static;
+  transform: none;
+  width: 180px;
+  height: 22px;
+  padding: 0;
+  background: #0c0a0d;
+}
+
+#quest {
+  font-size: 14px;
+  color: #d8ccb0;
+  text-shadow: 1px 1px 0 #000;
+  background: #0c0a0d;
+  padding: 4px 8px;
+}
+
+#dialog {
+  bottom: 112px;
+  background: #0c0a0d;
+  padding: 10px 14px;
+}
+
+#dialog b {
+  font-family: "Jacquard 24", "Pixelify Sans", monospace;
+  font-size: 22px;
+  font-weight: normal;
+  color: #f0b24a;
+  text-shadow: 2px 2px 0 #000;
+  font-variant: normal;
+  letter-spacing: 1px;
+}
+
+#dialog p {
+  font-size: 16px;
+  color: #d8ccb0;
+  text-shadow: 1px 1px 0 #000;
+}
+
+#dialog .topic,
+#dialog .cont {
+  font-size: 15px;
+}
+
+#prompt {
+  font-size: 16px;
+  color: #cfc3a8;
+  text-shadow: 2px 2px 0 #000;
+  letter-spacing: 0;
+}
+
+#prompt:not(:empty)::before,
+#prompt:not(:empty)::after {
+  content: none;
+}
+
+/* 5×5 pixel cross — four 1px arms, 1px centre gap, bone over black. */
+#reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border-radius: 0;
+  box-shadow:
+    -2px 0 0 #ece4d2, 2px 0 0 #ece4d2, 0 -2px 0 #ece4d2, 0 2px 0 #ece4d2,
+    -1px 1px 0 #000, 3px 1px 0 #000, 1px -1px 0 #000, 1px 3px 0 #000;
+}
+
+/* --- shared panel chrome -------------------------------------------------- */
+
+.panel-px {
+  background: #0c0a0d;
+  font-family: "Pixelify Sans", "Courier New", monospace;
+  font-size: 15px;
+  color: #d8ccb0;
+  text-shadow: 1px 1px 0 #000;
+  padding: 16px 20px;
+}
+
+.panel-px h2,
+#inventory h2,
+.journalpage h2,
+.shoppanel h2,
+.autopsypanel h2 {
+  font-family: "Jacquard 24", "Pixelify Sans", monospace;
+  font-size: 28px;
+  font-weight: normal;
+  color: #f0b24a;
+  text-shadow: 2px 2px 0 #000;
+  border-bottom: 2px dotted #5a4a30;
+  padding-bottom: 4px;
+  margin: 0 0 12px;
+  font-variant: normal;
+  letter-spacing: 1px;
+}
+
+.panel-px h3,
+#inventory h3,
+.jentries h3 {
+  font-family: "Jacquard 24", "Pixelify Sans", monospace;
+  font-size: 20px;
+  font-weight: normal;
+  color: #8a7a5c;
+  text-shadow: 2px 2px 0 #000;
+  font-variant: normal;
+  letter-spacing: 1px;
+}
+
+.item,
+.recipe,
+.jentry,
+.jclue,
+.jdeduction,
+.ware,
+.eqrow,
+.finding {
+  border-bottom: 1px solid #1c1719;
+}
+
+.item:hover,
+.recipe:hover,
+.jentry:hover,
+.jclue:hover,
+.jdeduction:hover,
+.ware:hover,
+.eqrow:hover {
+  background: #1a1410;
+  color: #f0b24a;
+}
+
+.panel-px button,
+.recipe button,
+.shopclose,
+.ware button {
+  font-family: "Pixelify Sans", "Courier New", monospace;
+  font-size: 15px;
+  background: #141217;
+  border: 2px solid #4a4a52;
+  box-shadow: inset 1px 1px 0 #3a3a42, inset -1px -1px 0 #101014;
+  color: #ece4d2;
+  text-shadow: 1px 1px 0 #000;
+  padding: 4px 14px;
+  cursor: pointer;
+}
+
+.panel-px button:hover:not(:disabled),
+.recipe button:hover:not(:disabled),
+.shopclose:hover,
+.ware button:hover:not(:disabled) {
+  border-color: #4a3a24;
+  box-shadow: inset 1px 1px 0 #6a5432, inset -1px -1px 0 #241c10;
+  color: #f0b24a;
+}
+
+.item canvas,
+.recipe canvas,
+.ware canvas,
+.slot .icon canvas,
+.doll canvas,
+.dollslot canvas {
+  image-rendering: pixelated;
+}
+
+.jentries::-webkit-scrollbar,
+.invpanel ::-webkit-scrollbar,
+.panel-px ::-webkit-scrollbar {
+  width: 8px;
+}
+
+.jentries::-webkit-scrollbar-track,
+.invpanel ::-webkit-scrollbar-track,
+.panel-px ::-webkit-scrollbar-track {
+  background: #0c0a0d;
+}
+
+.jentries::-webkit-scrollbar-thumb,
+.invpanel ::-webkit-scrollbar-thumb,
+.panel-px ::-webkit-scrollbar-thumb {
+  background: #4a3a24;
+  border-radius: 0;
+}
+
+/* Old gothic chrome that the pixel UI replaces. */
+.panel .rule,
+.panel .hint,
+.panel .keys {
+  display: none;
 }

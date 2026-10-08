@@ -4,7 +4,8 @@
 import { canCraft, carried, count, RECIPES } from "./inventory";
 import { binds, keyName } from "./settings";
 import { ITEMS } from "./items";
-import { adornPanel, roseWindow } from "./ornaments";
+import { applyFrame, barTile, iconPix, maskEmblem } from "./uiart";
+import { maskTex } from "./sprites";
 import type { Inventory } from "./inventory";
 import type { ItemId } from "./types";
 import type { SpriteTex } from "./types";
@@ -159,17 +160,33 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
   const counts: Record<string, HTMLElement> = {};
   const slots: Record<string, HTMLElement> = {};
 
-  // The needs plate wears the same chapel trim as the dialogue panels.
-  adornPanel(document.getElementById("bars")!);
-
-  // A rose medallion riding on the hotbar's top rail — the centre ornament.
-  const hotRose = roseWindow(46);
-  hotRose.className = "hotrose";
-  invBar.appendChild(hotRose);
+  // Bronze frame on the bottom bar; segmented tiles and pixel icons on the
+  // need bars; the mask emblem rides the centre slot.
+  applyFrame(document.getElementById("bottombar")!, "bronze");
+  const barColors: Record<string, [number, number, number]> = {
+    health: [150, 40, 40],
+    hunger: [170, 120, 40],
+    thirst: [60, 110, 170],
+    fatigue: [110, 80, 150],
+  };
+  for (const [k, c] of Object.entries(barColors)) {
+    const fill = document.getElementById(`bar-${k}`)!;
+    fill.style.backgroundImage = `url("${barTile(c)}")`;
+  }
+  for (const k of ["health", "hunger", "thirst", "fatigue"] as const) {
+    const kind = { health: "heart", hunger: "bread", thirst: "drop", fatigue: "moon" }[k] as
+      | "heart" | "bread" | "drop" | "moon";
+    document.getElementById(`icon-${k}`)!.appendChild(iconPix(kind));
+  }
+  applyFrame(questEl, "iron");
+  applyFrame(dialog, "bronze");
+  applyFrame(compass, "iron");
+  document.getElementById("emblem")!.appendChild(maskEmblem(maskTex()));
 
   for (const def of SLOTS) {
     const slot = document.createElement("div");
     slot.className = "slot" + (def.id === "sous" ? " equip" : "");
+    applyFrame(slot, "iron");
     slot.title = def.id === "sous" ? "sous" : ITEMS[def.id as ItemId].name;
     const iconHolder = document.createElement("div");
     iconHolder.className = "icon";
@@ -207,8 +224,8 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
   function refreshPanel(inv: Inventory): void {
     panel.innerHTML = "";
     const box = document.createElement("div");
-    box.className = "invpanel";
-    adornPanel(box);
+    box.className = "invpanel panel-px";
+    applyFrame(box, "bronze");
     panel.appendChild(box);
 
     const head = document.createElement("h2");
@@ -338,7 +355,7 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
     },
     refreshPanel,
     setPrompt(text) {
-      prompt.textContent = text ? `[${keyName(binds.interact)}] ${text}` : "";
+      prompt.textContent = text ? `◆ [${keyName(binds.interact)}] ${text} ◆` : "";
     },
     setQuest(text) {
       questEl.textContent = text;
