@@ -110,6 +110,8 @@ for (const n of QUEST_NPCS) {
   const kind = spriteKinds[n.sprite];
   sprites.push({ kind: n.sprite, x: n.x, y: n.y, ...kind });
 }
+// PROTOTYPE: a second cordon guard in the native-pixel style, posted a step
+// west of the provost for a side-by-side comparison. Scenery only — no talk.
 const quest = { npcs: QUEST_NPCS, state: initQuest() };
 const villagers = makeVillagers(map);
 // The watch and the market — patrols beat their rounds day and night;

@@ -1,5 +1,11 @@
 import { TEX_SIZE } from "./config";
 import type { SpriteTex, Texture, TextureSet, ModelPart } from "./types";
+import { figurePix } from "./pixelart";
+import type { HairStyle } from "./figures";
+import { HAIR_COLORS,
+  VILLAGER_OUTFITS, NUN, AUBERT, DIGGER, WIDOW, GUARD, INNKEEP, BAKER,
+  ALCHEMIST, PATIENT, HOODED, HERBWIFE, CLOTHIER, MONGER, ANETTE, SHAMBLER,
+} from "./figures";
 
 // Sprite bitmaps, generated procedurally like the textures. Every sprite is a
 // SPRITE_PX x SPRITE_PX RGBA bitmap; alpha < 128 is transparent.
@@ -155,242 +161,10 @@ function finish(s: SpriteTex): SpriteTex {
 // possible. Pure JS — no canvas, deterministic.
 // The shared primitives scale by buffer size, so Ras just passes its logical
 // coordinates straight through.
+//
+// (The smooth Ras rasterizer that once drew the figures has been retired —
+// the shared raw-pixel helpers above are what the props still draw with.)
 
-const RAS = 4;
-
-class Ras {
-  readonly tex: SpriteTex = makeSprite(SPRITE_PX * RAS);
-  px(x: number, y: number, r: number, g: number, b: number, a = 255): void {
-    px(this.tex, x, y, r, g, b, a);
-  }
-  rect(x0: number, y0: number, x1: number, y1: number, r: number, g: number, b: number, a = 255): void {
-    rect(this.tex, x0, y0, x1, y1, r, g, b, a);
-  }
-  ellipse(cx: number, cy: number, rx: number, ry: number, r: number, g: number, b: number, a = 255): void {
-    ellipse(this.tex, cx, cy, rx, ry, r, g, b, a);
-  }
-  line(x0: number, y0: number, x1: number, y1: number, width: number, r: number, g: number, b: number, a = 255): void {
-    line(this.tex, x0, y0, x1, y1, width, r, g, b, a);
-  }
-  // A capsule — a limb segment, rounded at both ends.
-  limb(x0: number, y0: number, x1: number, y1: number, width: number, r: number, g: number, b: number): void {
-    this.line(x0, y0, x1, y1, width, r, g, b);
-  }
-  // A limb shaded as a cylinder — a lit band toward the top-left light, a
-  // core shadow on the far side, a rim highlight along the lit edge.
-  tube(x0: number, y0: number, x1: number, y1: number, width: number, r: number, g: number, b: number): void {
-    this.limb(x0, y0, x1, y1, width, r, g, b);
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const len = Math.hypot(dx, dy) || 1;
-    let nx = -dy / len;
-    let ny = dx / len;
-    if (nx + ny > 0) { nx = -nx; ny = -ny; } // face the upper-left light
-    const off = width * 0.3;
-    const bw = width * 0.5;
-    this.line(x0 + nx * off, y0 + ny * off, x1 + nx * off, y1 + ny * off, bw, r * 1.22, g * 1.22, b * 1.22);
-    this.line(x0 - nx * off, y0 - ny * off, x1 - nx * off, y1 - ny * off, bw, r * 0.68, g * 0.68, b * 0.68);
-    this.line(x0 + nx * off * 1.5, y0 + ny * off * 1.5, x1 + nx * off * 1.5, y1 + ny * off * 1.5, 0.4, r * 1.4, g * 1.4, b * 1.4);
-  }
-  // Scanline fill like poly, but lit left→dark right with vertical fold
-  // ridges and a shadowed hem — draped cloth instead of a flat shape.
-  shadedPoly(pts: [number, number][], r: number, g: number, b: number, folds = 3, seed = 0): void {
-    const s = this.tex;
-    const K = s.w / TEX_SIZE;
-    const P = pts.map(([x, y]) => [x * K, y * K]);
-    const yMin = Math.floor(Math.min(...P.map((p) => p[1])));
-    const yMax = Math.ceil(Math.max(...P.map((p) => p[1])));
-    const hemLine = yMin + (yMax - yMin) * 0.88;
-    for (let y = yMin; y <= yMax; y++) {
-      const xs: number[] = [];
-      for (let i = 0; i < P.length; i++) {
-        const [x1, y1] = P[i];
-        const [x2, y2] = P[(i + 1) % P.length];
-        if ((y1 <= y && y2 > y) || (y2 <= y && y1 > y)) {
-          xs.push(x1 + ((y - y1) / (y2 - y1)) * (x2 - x1));
-        }
-      }
-      xs.sort((m, n) => m - n);
-      for (let i = 0; i + 1 < xs.length; i += 2) {
-        const xL = xs[i];
-        const xR = xs[i + 1];
-        const w = Math.max(1, xR - xL);
-        for (let x = Math.ceil(xL); x <= Math.floor(xR); x++) {
-          const t = (x - xL) / w;
-          let shade = 1.06 - 0.28 * t + Math.sin(((x - xL) * folds * Math.PI) / w + seed) * 0.07;
-          if (y > hemLine) shade *= 0.8;
-          rawPx(s, x, y, r * shade, g * shade, b * shade);
-        }
-      }
-    }
-  }
-  poly(pts: [number, number][], r: number, g: number, b: number, a = 255): void {
-    const s = this.tex;
-    const K = s.w / TEX_SIZE; // scanlines run in real pixels
-    const P = pts.map(([x, y]) => [x * K, y * K]);
-    const yMin = Math.floor(Math.min(...P.map((p) => p[1])));
-    const yMax = Math.ceil(Math.max(...P.map((p) => p[1])));
-    for (let y = yMin; y <= yMax; y++) {
-      const xs: number[] = [];
-      for (let i = 0; i < P.length; i++) {
-        const [x1, y1] = P[i];
-        const [x2, y2] = P[(i + 1) % P.length];
-        if ((y1 <= y && y2 > y) || (y2 <= y && y1 > y)) {
-          xs.push(x1 + ((y - y1) / (y2 - y1)) * (x2 - x1));
-        }
-      }
-      xs.sort((m, n) => m - n);
-      for (let i = 0; i + 1 < xs.length; i += 2) {
-        for (let x = Math.ceil(xs[i]); x <= Math.floor(xs[i + 1]); x++) rawPx(s, x, y, r, g, b, a);
-      }
-    }
-  }
-  // Box-downsample to the real sprite size. Colors are weighted by coverage
-  // so partial-coverage edges keep their hue instead of darkening into a
-  // fringe; the renderer's <128 alpha cut decides the silhouette.
-  down(): SpriteTex {
-    const s = this.tex;
-    const out = makeSprite();
-    const k = s.w / out.w; // RAS — buffer pixels per output pixel
-    for (let y = 0; y < out.h; y++) {
-      for (let x = 0; x < out.w; x++) {
-        let rs = 0, gs = 0, bs = 0, as = 0, cov = 0;
-        for (let dy = 0; dy < k; dy++) {
-          for (let dx = 0; dx < k; dx++) {
-            const i = ((y * k + dy) * s.w + x * k + dx) * 4;
-            const w8 = s.data[i + 3] / 255;
-            cov += w8;
-            as += s.data[i + 3];
-            rs += s.data[i] * w8;
-            gs += s.data[i + 1] * w8;
-            bs += s.data[i + 2] * w8;
-          }
-        }
-        const o = (y * out.w + x) * 4;
-        if (cov > 0) {
-          out.data[o] = rs / cov;
-          out.data[o + 1] = gs / cov;
-          out.data[o + 2] = bs / cov;
-        }
-        out.data[o + 3] = as / (k * k);
-      }
-    }
-    return out;
-  }
-}
-
-// Sallow skin — the quarter's diet and dread washed out of the flesh:
-// desaturated toward wax, darkened, cooled. Applied everywhere a Dress
-// hands out skin so every citizen carries the same pallor.
-function wan(c: [number, number, number]): [number, number, number] {
-  const l = (c[0] + c[1] + c[2]) / 3;
-  return [(c[0] * 0.8 + l * 0.2) * 1.0, (c[1] * 0.8 + l * 0.2) * 0.98, (c[2] * 0.8 + l * 0.2) * 0.96];
-}
-
-// Somber cloth — dyestuff cut with grey: hue kept so robes stay
-// identifiable, saturation and value both dragged down.
-function dour(c: [number, number, number]): [number, number, number] {
-  const l = (c[0] + c[1] + c[2]) / 3;
-  const cl = (v: number) => Math.min(255, Math.max(0, (l + (v - l) * 1.3) * 0.9));
-  return [cl(c[0]), cl(c[1]), cl(c[2])];
-}
-
-// The quarter's face — a narrower skull, the brow sunk in shadow, eyes
-// dark sockets, a downturned line of a mouth. Worn, not cute.
-function faceR(
-  r: Ras, fx: number, headY: number, skin: [number, number, number],
-  beard = false, hair: [number, number, number] | null = null
-): void {
-  r.ellipse(fx, headY, 3.4, 4.3, skin[0], skin[1], skin[2]);
-  // Ears — pinned to the skull sides.
-  r.ellipse(fx - 3.5, headY + 0.3, 0.7, 1.1, skin[0] * 0.9, skin[1] * 0.9, skin[2] * 0.9);
-  r.ellipse(fx + 3.5, headY + 0.3, 0.7, 1.1, skin[0] * 0.9, skin[1] * 0.9, skin[2] * 0.9);
-  // Brow shadow — lit forehead above it.
-  r.ellipse(fx, headY - 1.4, 3.0, 1.6, skin[0] * 0.85, skin[1] * 0.85, skin[2] * 0.85);
-  r.px(fx - 1.2, headY - 2.4, skin[0] * 1.12, skin[1] * 1.12, skin[2] * 1.12);
-  // Brows — strokes angled down toward the nose.
-  r.line(fx - 2.4, headY - 1.3, fx - 0.9, headY - 1.0, 0.45, skin[0] * 0.45, skin[1] * 0.45, skin[2] * 0.45);
-  r.line(fx + 2.4, headY - 1.3, fx + 0.9, headY - 1.0, 0.45, skin[0] * 0.45, skin[1] * 0.45, skin[2] * 0.45);
-  // Eyes — one dark pixel each.
-  r.px(fx - 1.5, headY - 0.2, skin[0] * 0.3, skin[1] * 0.3, skin[2] * 0.3);
-  r.px(fx + 1.5, headY - 0.2, skin[0] * 0.3, skin[1] * 0.3, skin[2] * 0.3);
-  // Nose — lit ridge, shadowed base.
-  r.line(fx, headY - 0.8, fx, headY + 1.0, 0.45, skin[0] * 1.08, skin[1] * 1.08, skin[2] * 1.08);
-  r.px(fx + 0.5, headY + 1.2, skin[0] * 0.65, skin[1] * 0.65, skin[2] * 0.65);
-  // Mouth and jaw shadow.
-  r.line(fx - 0.9, headY + 2.3, fx + 0.9, headY + 2.3, 0.45, skin[0] * 0.5, skin[1] * 0.5, skin[2] * 0.5);
-  r.rect(fx - 1.8, headY + 3.0, fx + 1.8, headY + 3.8, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
-  if (beard) {
-    const bc = hair ?? [skin[0] * 0.55, skin[1] * 0.52, skin[2] * 0.5];
-    r.ellipse(fx, headY + 2.6, 2.6, 1.9, bc[0] * 0.9, bc[1] * 0.9, bc[2] * 0.9);
-    r.line(fx - 0.9, headY + 2.3, fx + 0.9, headY + 2.3, 0.45, skin[0] * 0.5, skin[1] * 0.5, skin[2] * 0.5);
-  }
-}
-
-// Hair, drawn in two passes around the face: `hairR` lays the cap and
-// falls behind the skull so the face ellipse cuts their lower edge;
-// `hairFrontR` then lays the fringe over the brow, with strand lines and
-// a couple of top-left highlights.
-type HairStyle = "crop" | "shoulder" | "bald" | "bun";
-const HAIR_COLORS: [number, number, number][] = [
-  [38, 30, 24],    // black
-  [62, 44, 30],    // dark brown
-  [90, 70, 44],    // brown
-  [110, 104, 96],  // iron grey
-  [150, 146, 138], // white-grey
-];
-
-function hairR(r: Ras, fx: number, headY: number, shoulderY: number, style: HairStyle | undefined, color: [number, number, number] | undefined, scale = 1): void {
-  if (!style || !color) return;
-  const [hr, hg, hb] = color;
-  const S = scale;
-  if (style === "bald") {
-    // Just a fringe ring at the back — bare crown, tufts at the sides.
-    r.ellipse(fx - 3.8 * S, headY + 1.4 * S, 1.4 * S, 2 * S, hr, hg, hb);
-    r.ellipse(fx + 3.8 * S, headY + 1.4 * S, 1.4 * S, 2 * S, hr, hg, hb);
-    r.ellipse(fx, headY - 3.6 * S, 4.2 * S, 1.6 * S, hr * 0.9, hg * 0.9, hb * 0.9);
-    return;
-  }
-  // The cap — over the top of the skull, cut by the face drawn after it.
-  r.ellipse(fx, headY - 3.4 * S, 4.6 * S, 3.2 * S, hr, hg, hb);
-  if (style === "shoulder") {
-    // Two falls beside the neck down to the shoulders.
-    r.rect(fx - 4.9 * S, headY - 1.5 * S, fx - 2.7 * S, shoulderY, hr, hg, hb);
-    r.rect(fx + 2.7 * S, headY - 1.5 * S, fx + 4.9 * S, shoulderY, hr, hg, hb);
-    r.line(fx - 3.4 * S, headY - 1 * S, fx - 3.6 * S, shoulderY - 1, 0.4, hr * 0.7, hg * 0.7, hb * 0.7);
-    r.line(fx + 3.4 * S, headY - 1 * S, fx + 3.6 * S, shoulderY - 1, 0.4, hr * 0.7, hg * 0.7, hb * 0.7);
-  } else if (style === "bun") {
-    r.ellipse(fx - 3.9 * S, headY - 4.6 * S, 2.4 * S, 2.4 * S, hr, hg, hb);
-    r.px(fx - 4.6 * S, headY - 5.6 * S, hr * 1.4, hg * 1.4, hb * 1.4);
-  }
-}
-
-function hairFrontR(r: Ras, fx: number, headY: number, style: HairStyle | undefined, color: [number, number, number] | undefined, scale = 1): void {
-  if (!style || !color || style === "bald") return;
-  const [hr, hg, hb] = color;
-  const S = scale;
-  // The fringe — hair crossing the brow over the face.
-  r.line(fx - 3.4 * S, headY - 3.6 * S, fx + 3.4 * S, headY - 3.6 * S, 0.8, hr * 0.85, hg * 0.85, hb * 0.85);
-  r.px(fx - 2.2 * S, headY - 5 * S, Math.min(255, hr * 1.5), Math.min(255, hg * 1.5), Math.min(255, hb * 1.5));
-  r.px(fx - 1 * S, headY - 5.6 * S, Math.min(255, hr * 1.5), Math.min(255, hg * 1.5), Math.min(255, hb * 1.5));
-}
-
-// A hand — palm, a thumb toward the body, knuckle shadows, a wrist shadow
-// where it leaves the sleeve. `side` is which side of the body the hand is
-// on (-1 = screen left); `grip` adds the crease of a closed fist.
-function handR(r: Ras, x: number, y: number, skin: [number, number, number], side: -1 | 1 = 1, grip = false): void {
-  r.ellipse(x, y, 2.0, 2.3, skin[0], skin[1], skin[2]);
-  r.ellipse(x - side * 0.6, y + 0.4, 0.8, 1.1, skin[0] * 0.94, skin[1] * 0.94, skin[2] * 0.94);
-  r.px(x - 0.8, y - 1.4, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
-  r.px(x + 0.6, y - 1.4, skin[0] * 0.72, skin[1] * 0.72, skin[2] * 0.72);
-  r.px(x, y - 2.4, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6); // wrist shadow
-  if (grip) r.line(x - 1, y + 0.2, x + 1, y + 0.6, 0.5, skin[0] * 0.6, skin[1] * 0.6, skin[2] * 0.6);
-}
-
-// A shared figure builder — a shaded robe with folds, a face with eyes and
-// brow, hands and feet. Every citizen is this body plus distinguishing
-// extras drawn on top, so they all read at the same level of detail.
-// A filled polygon on a raw sprite — same scanline fill as Ras.poly.
 function s_poly(s: SpriteTex, pts: [number, number][], r: number, g: number, b: number, a = 255): void {
   const k = s.w / TEX_SIZE;
   const P = pts.map(([x, y]) => [x * k, y * k]);
@@ -605,12 +379,9 @@ function skinSprite(): SpriteTex {
 }
 // A plague victim that got back up. Hooded, hunched, grey-green.
 function shamblerFrame(step: number): SpriteTex {
-  const r = new Ras();
-  figureRig(r, SHAMBLER, "shamble", step * 0.5, 15);
-  return finish(r.down());
+  return figurePix(SHAMBLER, "shamble", step * 0.5);
 }
 
-const SHAMBLER: Outfit = { skin: [96, 108, 88], under: [60, 66, 60], hose: [40, 46, 42], boots: [96, 108, 88], barefoot: true, over: { kind: "rags", color: [34, 38, 36], hem: 54, ragged: true }, head: { kind: "deepHood", color: [27, 31, 29] }, arms: "hang", marks: [52, 62, 46] };
 // Villagers — dark-fantasy crowd pieces on the rasterizer: an articulated
 // body (scissoring legs under the hem, counter-swinging arms, cloth that
 // swings with the stride) in eight dressings, so the streets read as a
@@ -655,522 +426,13 @@ const DRESSES: Dress[] = [
   { robe: [62, 76, 96], skin: [168, 130, 96], hose: [40, 44, 50], shoe: [30, 26, 22], belt: [46, 36, 24], hemY: 46, hair: "crop", hairColor: HAIR_COLORS[1] },
 ];
 
-type Stance = "walk" | "stand" | "shamble";
-type ArmPose = "hang" | "fold" | "raiseR" | "hug" | "staffR" | "trayBoth" | "carryL" | "holdOutR";
-type HeadKind =
-  | "none" | "hood" | "deepHood" | "cap" | "flatcap" | "wimple"
-  | "kettlehelm" | "strawhat" | "kerchief" | "coif" | "bakercap" | "widowveil";
-type OverKind = "tunic" | "robe" | "gown" | "cloak" | "tabard" | "habit" | "rags";
-type PropKind =
-  | "staff" | "lantern" | "basket" | "halberd" | "ledger" | "tray" | "bundle" | "bowl"
-  | "spade" | "peel" | "rake" | "tankard" | "vial" | "clothbolt" | "rue" | "satchel" | "whip" | "spadeShoulder";
-interface Outfit {
-  skin: RGB; hair?: HairStyle; hairColor?: RGB; beard?: boolean;
-  under: RGB;                   // chemise/mail showing at throat and cuffs
-  hose: RGB; boots: RGB; bootHigh?: boolean; barefoot?: boolean;
-  over: { kind: OverKind; color: RGB; hem: number; trim?: RGB; ragged?: boolean; patches?: boolean };
-  rolledSleeves?: boolean;      // sleeves stop at the elbow, forearm bare
-  cowl?: boolean;               // a hood worn down, bunched at the shoulders
-  shawl?: { color: RGB; hem: number }; // a second cloth layer over the shoulders
-  insignia?: RGB;               // a badge on the chest (the cordon cross)
-  marks?: RGB;                  // plague marks — dark stipple on skin and cloth
-  belt?: { color: RGB; buckle?: boolean; pouch?: boolean; rope?: boolean };
-  apron?: { color: RGB; bib?: boolean; hem: number };
-  head: { kind: HeadKind; color?: RGB };
-  arms: ArmPose;
-  props?: { kind: PropKind; hand: "L" | "R" }[];
-  hunch?: number; // 0..0.7
-}
-
-// Headgear drawn over the face — each takes the face centre and crown.
-function headgearR(r: Ras, kind: HeadKind, fx: number, headY: number, shoulderY: number, color: RGB | undefined, skin: RGB): void {
-  const c: RGB = color ?? [60, 50, 40];
-  switch (kind) {
-    case "none": break;
-    case "hood": {
-      // Peaked hood with a cape over the shoulders; the face sits in shade.
-      r.poly(
-        [[fx - 6.4, headY + 2], [fx - 5.8, headY - 3.5], [fx, headY - 8], [fx + 5.8, headY - 3.5], [fx + 6.4, headY + 2]],
-        c[0], c[1], c[2]
-      );
-      r.poly(
-        [[fx - 6.6, headY + 1], [fx + 6.6, headY + 1], [fx + 7.2, shoulderY + 6], [fx - 7.2, shoulderY + 6]],
-        c[0] * 0.85, c[1] * 0.85, c[2] * 0.85
-      );
-      r.ellipse(fx, headY + 0.9, 3.1, 3.3, skin[0] * 0.75, skin[1] * 0.75, skin[2] * 0.75);
-      r.px(fx - 1.4, headY + 0.4, skin[0] * 0.45, skin[1] * 0.45, skin[2] * 0.45);
-      r.px(fx + 1.4, headY + 0.4, skin[0] * 0.45, skin[1] * 0.45, skin[2] * 0.45);
-      break;
-    }
-    case "deepHood": {
-      // A deeper cowl — the face is swallowed; two dim eyes only.
-      r.poly(
-        [[fx - 6.8, headY + 3.5], [fx - 6.2, headY - 4], [fx, headY - 9], [fx + 6.2, headY - 4], [fx + 6.8, headY + 3.5]],
-        c[0], c[1], c[2]
-      );
-      r.poly(
-        [[fx - 7, headY + 2], [fx + 7, headY + 2], [fx + 8, shoulderY + 7], [fx - 8, shoulderY + 7]],
-        c[0] * 0.8, c[1] * 0.8, c[2] * 0.85
-      );
-      r.ellipse(fx, headY + 0.9, 3.4, 3.5, skin[0] * 0.25, skin[1] * 0.25, skin[2] * 0.25);
-      r.px(fx - 1.4, headY - 0.2, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
-      r.px(fx + 1.4, headY - 0.2, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
-      break;
-    }
-    case "cap": {
-      r.ellipse(fx, headY - 4.4, 4.2, 2.2, c[0], c[1], c[2]);
-      r.ellipse(fx, headY - 3.0, 4.6, 0.8, c[0] * 0.8, c[1] * 0.8, c[2] * 0.8);
-      break;
-    }
-    case "flatcap": {
-      r.ellipse(fx, headY - 4.6, 3.9, 2.2, c[0] * 1.05, c[1] * 1.05, c[2] * 1.05); // low crown
-      r.ellipse(fx, headY - 3.6, 6.4, 1.4, c[0], c[1], c[2]); // wide brim
-      break;
-    }
-    case "wimple": {
-      // Dark veil falling to the shoulders behind the white linen frame.
-      r.poly(
-        [[fx - 7.5, shoulderY + 5], [fx - 5.5, headY - 5], [fx, headY - 7.5], [fx + 5.5, headY - 5], [fx + 7.5, shoulderY + 5]],
-        40, 38, 48
-      );
-      r.rect(fx - 3.6, headY - 4.2, fx + 3.6, headY - 2.4, 212, 206, 190); // the brow band
-      r.rect(fx - 3.6, headY - 2.4, fx - 2.5, headY + 3, 212, 206, 190); // the frame — left cheek
-      r.rect(fx + 2.5, headY - 2.4, fx + 3.6, headY + 3, 212, 206, 190); // right cheek
-      r.rect(fx - 3.6, headY + 3, fx + 3.6, headY + 4.4, 212, 206, 190); // under the chin
-      r.rect(fx - 2.5, headY - 2.4, fx + 2.5, headY + 3, skin[0], skin[1], skin[2]); // face in its opening
-      r.px(fx - 1.5, headY - 0.2, 26, 20, 16);
-      r.px(fx + 1.5, headY - 0.2, 26, 20, 16);
-      r.rect(fx - 1, headY + 2.2, fx + 1, headY + 2.4, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
-      break;
-    }
-    case "kettlehelm": {
-      // Mail coif under a wide-brimmed helm; the face sits in the opening.
-      r.ellipse(fx, headY + 3.5, 5.4, 6, 96, 100, 108);
-      r.rect(fx - 4.5, headY + 5, fx + 4.5, shoulderY + 5, 96, 100, 108);
-      r.rect(fx - 2.4, headY + 1.8, fx + 2.4, headY + 7.5, skin[0] * 0.85, skin[1] * 0.85, skin[2] * 0.85);
-      r.px(fx - 1.3, headY + 4, 16, 12, 10);
-      r.px(fx + 1.3, headY + 4, 16, 12, 10);
-      const helm: RGB = color ?? [112, 116, 124];
-      r.ellipse(fx, headY - 3.4, 9, 2.4, helm[0], helm[1], helm[2]);
-      r.ellipse(fx, headY - 5.4, 5, 3.6, helm[0] * 1.08, helm[1] * 1.08, helm[2] * 1.08);
-      r.px(fx, headY - 7.9, helm[0] * 1.3, helm[1] * 1.3, helm[2] * 1.3);
-      break;
-    }
-    case "strawhat": {
-      const straw: RGB = color ?? [170, 140, 70];
-      r.ellipse(fx, headY - 3.4, 10, 1.2, straw[0], straw[1], straw[2]);
-      r.ellipse(fx, headY - 5, 4.2, 2.4, straw[0] * 0.9, straw[1] * 0.9, straw[2] * 0.9);
-      r.line(fx - 4.2, headY - 4.2, fx + 4.2, headY - 4.2, 0.7, straw[0] * 0.6, straw[1] * 0.6, straw[2] * 0.6); // hat band
-      break;
-    }
-    case "kerchief": {
-      r.ellipse(fx, headY - 4, 5, 1.8, c[0], c[1], c[2]);
-      r.px(fx + 5, headY - 3.8, c[0], c[1], c[2]); // the knot
-      r.px(fx + 5.8, headY - 1, c[0] * 0.9, c[1] * 0.9, c[2] * 0.9); // its tail
-      break;
-    }
-    case "coif": {
-      const linen: RGB = color ?? [214, 206, 190];
-      r.ellipse(fx, headY - 1.4, 4.6, 4.4, linen[0], linen[1], linen[2]);
-      r.rect(fx - 2.4, headY - 2.2, fx + 2.4, headY + 3.2, skin[0], skin[1], skin[2]); // face opening
-      r.px(fx - 1.4, headY - 0.2, 26, 20, 16);
-      r.px(fx + 1.4, headY - 0.2, 26, 20, 16);
-      r.line(fx - 2, headY + 4.2, fx + 2, headY + 4.2, 0.6, linen[0] * 0.7, linen[1] * 0.7, linen[2] * 0.7); // chin tie
-      break;
-    }
-    case "bakercap": {
-      const cloth: RGB = color ?? [222, 216, 200];
-      r.ellipse(fx, headY - 4.4, 5.4, 2.2, cloth[0], cloth[1], cloth[2]);
-      r.ellipse(fx, headY - 6, 3.6, 2.2, cloth[0] * 1.02, cloth[1] * 1.02, cloth[2] * 1.02);
-      break;
-    }
-    case "widowveil": {
-      // Sheer black veil over the head, falling to the shoulders, pale-edged.
-      r.ellipse(fx, headY - 3, 6, 4, 34, 30, 38);
-      r.rect(fx - 5, headY - 0.5, fx + 5, shoulderY + 4, 30, 26, 34);
-      r.line(fx - 5, headY - 0.5, fx - 5, shoulderY + 4, 0.8, 70, 66, 74); // pale edge
-      r.line(fx + 5, headY - 0.5, fx + 5, shoulderY + 4, 0.8, 70, 66, 74);
-      r.rect(fx - 2.6, headY + 0.6, fx + 2.6, headY + 5.5, skin[0] * 0.5, skin[1] * 0.5, skin[2] * 0.5); // dimmed face
-      r.px(fx - 1.4, headY + 2, 20, 16, 14);
-      r.px(fx + 1.4, headY + 2, 20, 16, 14);
-      break;
-    }
-  }
-}
-
-// Hand props — placed at the solved hand points. Long tools (staff,
-// halberd, spadeShoulder) draw their shafts behind the body instead, in
-// figureRig's first pass.
-function propR(r: Ras, kind: PropKind, hx: number, hy: number, shoulderY: number): void {
-  switch (kind) {
-    case "lantern": {
-      r.line(hx, hy, hx - 1, hy + 4, 0.7, 40, 38, 44); // the cord
-      r.rect(hx - 3.6, hy + 4, hx + 1.4, hy + 9, 44, 42, 48); // the cage
-      r.rect(hx - 2.6, hy + 5, hx + 0.4, hy + 8, 240, 170, 60); // amber glass
-      r.px(hx - 1.1, hy + 6.5, 255, 224, 150);
-      break;
-    }
-    case "basket": {
-      r.ellipse(hx - 1, hy - 1.5, 3.8, 3, 140, 100, 58);
-      r.ellipse(hx - 1, hy - 2.6, 4.2, 1.6, 160, 118, 72); // the rim
-      r.line(hx - 4, hy - 2.5, hx - 4, hy + 1, 0.6, 110, 80, 46);
-      break;
-    }
-    case "ledger": {
-      r.rect(hx - 3.2, hy - 3.2, hx + 3, hy + 3.2, 96, 80, 52);
-      r.line(hx - 3.2, hy - 3.2, hx - 3.2, hy + 3.2, 0.8, 60, 48, 32); // the spine
-      break;
-    }
-    case "tray": {
-      r.rect(hx - 7, hy - 1.5, hx + 7, hy + 1.5, 110, 80, 48);
-      r.ellipse(hx - 3.5, hy - 1.4, 2.4, 1.6, 168, 124, 72);
-      r.ellipse(hx + 0.5, hy - 1.8, 2.4, 1.6, 178, 134, 80);
-      r.ellipse(hx + 4, hy - 1.2, 2.4, 1.6, 160, 118, 68);
-      break;
-    }
-    case "bundle": {
-      r.ellipse(hx - 2, hy - 2, 3.8, 3.6, 118, 96, 64);
-      r.line(hx - 4.5, hy - 3.5, hx + 0.5, hy - 0.5, 0.7, 90, 72, 46); // the tie
-      break;
-    }
-    case "bowl": {
-      r.ellipse(hx, hy, 3.2, 2.2, 96, 82, 60);
-      r.ellipse(hx, hy - 0.8, 2.6, 1, 70, 58, 40); // the hollow
-      break;
-    }
-    case "spade": {
-      r.line(hx, hy, hx + 1, hy + 8, 1.4, 96, 70, 42);
-      r.rect(hx - 1.5, hy + 7, hx + 3.5, hy + 13, 104, 108, 114);
-      r.px(hx, hy + 8.5, 150, 154, 160); // worn edge
-      break;
-    }
-    case "peel": {
-      r.line(hx, hy, hx + 4, hy - 16, 1.6, 120, 92, 56);
-      r.ellipse(hx + 5, hy - 18, 3.6, 3, 138, 106, 66); // the blade
-      r.px(hx + 5, hy - 18, 90, 68, 40); // a loaf on it
-      break;
-    }
-    case "rake": {
-      r.line(hx, hy, hx + 5, hy - 14, 1.4, 96, 70, 42);
-      for (let i = 0; i < 4; i++) r.line(hx + 2.5 + i * 1.3, hy - 12 + i * 0, hx + 3.5 + i * 1.3, hy - 15, 0.7, 96, 70, 42);
-      break;
-    }
-    case "tankard": {
-      r.rect(hx - 1.8, hy - 1, hx + 1.8, hy + 3.5, 128, 122, 110);
-      r.rect(hx - 1.8, hy - 1, hx + 1.8, hy + 0.5, 150, 144, 130); // the rim
-      r.line(hx + 1.8, hy, hx + 3.4, hy + 1.6, 0.8, 118, 112, 100); // handle
-      break;
-    }
-    case "vial": {
-      r.rect(hx - 1.2, hy - 2, hx + 1.2, hy + 2.5, 60, 200, 90);
-      r.px(hx, hy - 0.5, 150, 255, 170);
-      break;
-    }
-    case "clothbolt": {
-      // Pale linen over the forearm, hanging in two falls.
-      r.poly([[hx - 4, hy - 3], [hx + 2, hy - 3], [hx + 3.5, hy + 9], [hx + 0.5, hy + 9.5], [hx - 1, hy + 4], [hx - 3, hy + 9]], 190, 182, 158);
-      r.line(hx - 0.5, hy - 2, hx + 0.5, hy + 8, 0.7, 150, 142, 120);
-      break;
-    }
-    case "rue": {
-      r.line(hx, hy, hx - 1.5, hy - 7, 0.8, 84, 110, 52);
-      r.line(hx, hy, hx + 2, hy - 8, 0.8, 92, 120, 58);
-      r.px(hx - 1.5, hy - 7.5, 100, 132, 64);
-      r.px(hx + 2, hy - 8.5, 110, 142, 70);
-      r.px(hx + 0.5, hy - 7, 100, 132, 64);
-      break;
-    }
-    case "satchel": {
-      // Leather bag at the hip on a shoulder strap.
-      r.line(26, shoulderY + 2, 40, 40, 1, 46, 34, 20); // the strap
-      r.rect(36, 40, 42, 46, 74, 52, 32);
-      r.rect(36, 40, 42, 41.5, 88, 64, 40); // flap
-      break;
-    }
-    case "whip": {
-      r.line(hx, hy, hx + 4, hy + 8, 0.8, 40, 30, 20);
-      r.line(hx + 4, hy + 8, hx + 6.5, 57, 0.7, 40, 30, 20); // trailing coil
-      break;
-    }
-    default: break; // staff / halberd / spadeShoulder draw behind the body
-  }
-}
-
-// One articulated body for every person in the quarter — a solved pose,
-// then the garments in a fixed order so layers always agree.
-function figureRig(r: Ras, o: Outfit, stance: Stance, phase: number, seed = 0): void {
-  const hunch = Math.max(o.hunch ?? 0, stance === "shamble" ? 0.5 : 0);
-  const st = Math.sin(phase * Math.PI * 2);
-  const skin = wan(o.skin);
-  const under = dour(o.under);
-  const over = dour(o.over.color);
-  const hoseC = dour(o.hose);
-  let bootC = dour(o.boots);
-  { // boots read a band lighter than the hose
-    const hl = hoseC[0] * 0.3 + hoseC[1] * 0.59 + hoseC[2] * 0.11;
-    const bl = bootC[0] * 0.3 + bootC[1] * 0.59 + bootC[2] * 0.11;
-    if (bl < hl + 25) bootC = [Math.min(255, bootC[0] * 1.35), Math.min(255, bootC[1] * 1.35), Math.min(255, bootC[2] * 1.35)];
-  }
-  const bob =
-    stance === "walk" ? -0.5 * Math.abs(Math.cos(phase * Math.PI * 2))
-    : stance === "stand" ? Math.sin(phase * Math.PI * 2) * 0.3
-    : -0.15;
-  const headY = 8.5 + hunch * 5 + bob * 0.5;
-  const shoulderY = 14.5 + hunch * 2.5 + bob * 0.5;
-  const hipY = 32 + bob * 0.4;
-  const kneeY = 46 + bob * 0.3;
-  const hemY = o.over.hem + bob * 0.4;
-  const fx = 32 + (stance === "shamble" ? 0.8 : 0);
-  const sw = stance === "walk" ? st * 2.6 : 0; // arm counter-swing
-
-  // Arm pose — solved first so back props and sleeves agree on the hands.
-  let elbL: [number, number], elbR: [number, number], handL: [number, number], hndR: [number, number];
-  switch (stance === "shamble" ? "shamble" : o.arms) {
-    case "fold": elbL = [24, 26]; handL = [30, 33.5]; elbR = [40, 26]; hndR = [34, 33.5]; break;
-    case "raiseR": elbL = [24.5, 27]; handL = [24 - sw, 38]; elbR = [40.5, 27]; hndR = [41, 20]; break;
-    case "hug": elbL = [24, 26]; handL = [35, 29.5]; elbR = [40, 26]; hndR = [29, 30.5]; break;
-    case "staffR": elbL = [24.5, 27]; handL = [24 - sw, 38]; elbR = [40.5, 27]; hndR = [42, 37]; break;
-    case "trayBoth": elbL = [24, 27]; handL = [28.5, 33]; elbR = [40, 27]; hndR = [35.5, 33]; break;
-    case "carryL": elbL = [24, 27]; handL = [25.5, 37]; elbR = [39.5, 27]; hndR = [40 + sw, 38]; break;
-    case "holdOutR": elbL = [24.5, 27]; handL = [24 - sw, 38]; elbR = [40, 27]; hndR = [42.5, 31]; break;
-    case "shamble": elbL = [25, 26]; handL = [27, 39.5]; elbR = [39, 26]; hndR = [37, 39.5]; break;
-    default: elbL = [24.5, 27]; handL = [24 - sw, 38]; elbR = [39.5, 27]; hndR = [40 + sw, 38]; break;
-  }
-
-  // Back props — long shafts behind the body.
-  for (const p of o.props ?? []) {
-    const hx = p.hand === "L" ? handL[0] : hndR[0];
-    const hy = p.hand === "L" ? handL[1] : hndR[1];
-    if (p.kind === "staff") {
-      r.line(hx, 2, hx, 60, 1.6, 96, 70, 42);
-      r.ellipse(hx, 2.5, 1.6, 1.6, 110, 80, 50); // the knob
-    } else if (p.kind === "halberd") {
-      const sx = hx + 3;
-      r.line(sx, 2, sx - 1, 60, 1.8, 90, 64, 36);
-      r.rect(sx - 2.5, 2, sx + 3.5, 9, 170, 174, 182); // axe head
-      r.line(sx + 1, 0.3, sx + 1, 2.5, 1.6, 185, 189, 197); // spike
-      r.px(sx - 1, 10, 150, 154, 162); // edge
-    } else if (p.kind === "spadeShoulder") {
-      r.line(hx, hy, 45, 7, 1.8, 96, 70, 42);
-      r.rect(42, 3, 48, 10, 104, 108, 114); // the blade
-      r.px(43, 5.5, 150, 154, 160);
-    }
-  }
-
-  // Back hair, then the legs — hose tubes with real knee joints.
-  hairR(r, fx, headY, shoulderY, o.hair, o.hairColor, 0.76);
-  const legL: [number, number] = [30, hipY], legR: [number, number] = [34, hipY];
-  let kneeL: [number, number], kneeR: [number, number], ankL: [number, number], ankR: [number, number];
-  if (stance === "walk") {
-    kneeL = [30 - st * 2.4, kneeY]; kneeR = [34 + st * 2.4, kneeY];
-    ankL = [30 - st * 4.2, 59.5 - Math.max(0, st) * 1.5];
-    ankR = [34 + st * 4.2, 59.5 - Math.max(0, -st) * 1.5];
-  } else if (stance === "shamble") {
-    kneeL = [29.8, kneeY]; ankL = [29.5, 59.5];
-    kneeR = [36, 50]; ankR = [36.5, 59.2]; // the dragging leg, bent and trailing
-  } else {
-    kneeL = [30, kneeY]; kneeR = [34, kneeY];
-    ankL = [29.5 + st * 0.2, 59.5]; ankR = [34.5 + st * 0.2, 59.5];
-  }
-  r.tube(legL[0], legL[1], kneeL[0], kneeL[1], 4.0, hoseC[0], hoseC[1], hoseC[2]);
-  r.tube(kneeL[0], kneeL[1], ankL[0], ankL[1], 3.4, hoseC[0] * 0.92, hoseC[1] * 0.92, hoseC[2] * 0.92);
-  r.tube(legR[0], legR[1], kneeR[0], kneeR[1], 4.0, hoseC[0], hoseC[1], hoseC[2]);
-  r.tube(kneeR[0], kneeR[1], ankR[0], ankR[1], 3.4, hoseC[0] * 0.92, hoseC[1] * 0.92, hoseC[2] * 0.92);
-  r.ellipse(kneeL[0], kneeL[1], 1.8, 1.7, hoseC[0] * 0.8, hoseC[1] * 0.8, hoseC[2] * 0.8);
-  r.ellipse(kneeR[0], kneeR[1], 1.8, 1.7, hoseC[0] * 0.8, hoseC[1] * 0.8, hoseC[2] * 0.8);
-
-  // Boots — ankle boot with a shaft, taller with a turned cuff, or bare feet.
-  for (const [ax, ay] of [ankL, ankR]) {
-    if (o.barefoot) {
-      r.ellipse(ax, ay + 0.3, 3.4, 2, skin[0] * 0.95, skin[1] * 0.95, skin[2] * 0.95);
-      r.line(ax - 2.4, ay + 1, ax + 2.4, ay + 1, 0.5, skin[0] * 0.7, skin[1] * 0.7, skin[2] * 0.7); // toes
-    } else {
-      r.rect(ax - 1.3, o.bootHigh ? 50 : 55, ax + 1.3, ay, bootC[0], bootC[1], bootC[2]);
-      if (o.bootHigh) r.ellipse(ax, 50.6, 1.9, 1.2, bootC[0] * 0.7, bootC[1] * 0.7, bootC[2] * 0.7); // turned cuff
-      r.ellipse(ax, ay + 0.4, 3.6, 2.4, bootC[0], bootC[1], bootC[2]);
-    }
-  }
-
-  // The chemise under everything — shows at the throat and the cuffs.
-  r.poly(
-    [[24.5, shoulderY + 1.6], [27.5, shoulderY], [36.5, shoulderY], [39.5, shoulderY + 1.6], [39.5, hipY], [24.5, hipY]],
-    under[0], under[1], under[2]
-  );
-
-  // The over-garment — each cut has its own silhouette.
-  const ov = o.over;
-  switch (ov.kind) {
-    case "tunic":
-      r.shadedPoly(
-        [[23.5, shoulderY + 1.8], [27, shoulderY], [37, shoulderY], [40.5, shoulderY + 1.8], [40.5, hemY], [35.5, hemY - 2], [28.5, hemY - 2], [23.5, hemY]],
-        over[0], over[1], over[2], 3, seed
-      );
-      break;
-    case "robe":
-      r.shadedPoly([[23.5, shoulderY + 1.8], [27, shoulderY], [37, shoulderY], [40.5, shoulderY + 1.8], [43, hemY], [21, hemY]], over[0], over[1], over[2], 3, seed);
-      break;
-    case "gown":
-      r.shadedPoly(
-        [[23.5, shoulderY + 1.8], [27, shoulderY], [37, shoulderY], [40.5, shoulderY + 1.8], [38.5, 27], [42.5, hemY], [21.5, hemY], [25.5, 27]],
-        over[0], over[1], over[2], 3, seed
-      );
-      break;
-    case "cloak":
-      if (ov.ragged) {
-        r.shadedPoly(
-          [[22, shoulderY + 1.3], [26.5, shoulderY - 0.5], [37.5, shoulderY - 0.5], [42, shoulderY + 1.3], [45, hemY], [41, hemY - 1.8], [36, hemY + 0.4], [30, hemY - 2], [24, hemY + 0.5], [21.5, hemY]],
-          over[0], over[1], over[2], 3, seed
-        );
-      } else {
-        r.shadedPoly([[22, shoulderY + 1.3], [26.5, shoulderY - 0.5], [37.5, shoulderY - 0.5], [42, shoulderY + 1.3], [45, hemY], [19, hemY]], over[0], over[1], over[2], 3, seed);
-      }
-      r.px(fx, shoulderY + 1.2, 190, 170, 90); // the clasp
-      break;
-    case "tabard":
-      r.shadedPoly([[24, shoulderY + 1.8], [27.5, shoulderY], [36.5, shoulderY], [40, shoulderY + 1.8], [40, hemY], [24, hemY]], over[0], over[1], over[2], 2, seed);
-      break;
-    case "habit":
-      r.shadedPoly([[23.5, shoulderY + 1.8], [27, shoulderY], [37, shoulderY], [40.5, shoulderY + 1.8], [43, hemY], [21, hemY]], over[0], over[1], over[2], 3, seed);
-      r.poly([[29, shoulderY + 5], [35, shoulderY + 5], [36, hemY - 2], [28, hemY - 2]], over[0] * 0.78, over[1] * 0.78, over[2] * 0.82); // scapular
-      break;
-    case "rags":
-      r.shadedPoly(
-        [[23.5, shoulderY + 1.8], [27, shoulderY], [37, shoulderY], [40.5, shoulderY + 1.8], [43, hemY], [39, hemY - 1.8], [34, hemY + 0.5], [28, hemY - 2.2], [23, hemY + 0.7], [21, hemY]],
-        over[0], over[1], over[2], 3, seed
-      );
-      break;
-  }
-  r.poly(
-    [[fx - 2.2, shoulderY + 0.7], [fx + 2.2, shoulderY + 0.7], [fx, shoulderY + 3.1]],
-    under[0], under[1], under[2]
-  ); // the collar V
-  if (ov.trim) {
-    r.line(22, hemY - 0.8, 42, hemY - 0.8, 0.9, ov.trim[0], ov.trim[1], ov.trim[2]); // hem band
-    r.line(fx - 3, shoulderY + 0.7, fx + 3, shoulderY + 0.7, 0.7, ov.trim[0], ov.trim[1], ov.trim[2]); // collar
-  }
-  if (ov.patches) {
-    r.rect(28, 40, 31.5, 43.5, over[0] * 0.72, over[1] * 0.72, over[2] * 0.78);
-    r.rect(35, 33, 37, 36, over[0] * 0.62, over[1] * 0.62, over[2] * 0.68);
-  }
-  if (o.insignia) {
-    r.rect(fx - 0.8, shoulderY + 4, fx + 0.8, shoulderY + 11, o.insignia[0], o.insignia[1], o.insignia[2]);
-    r.rect(fx - 3, shoulderY + 6, fx + 3, shoulderY + 7.6, o.insignia[0], o.insignia[1], o.insignia[2]);
-  }
-  if (o.shawl) {
-    const shc = dour(o.shawl.color);
-    r.poly([[23, shoulderY + 1.4], [27, shoulderY], [37, shoulderY], [41, shoulderY + 1.4], [42.5, o.shawl.hem], [21.5, o.shawl.hem]], shc[0], shc[1], shc[2]);
-  }
-  if (o.apron) {
-    const ap = dour(o.apron.color);
-    r.poly([[27, 31], [37, 31], [39, o.apron.hem], [25, o.apron.hem]], ap[0], ap[1], ap[2]);
-    if (o.apron.bib) {
-      r.rect(28, shoulderY + 2, 36, 31, ap[0], ap[1], ap[2]);
-      r.line(27, 31, 23.5, 33, 0.9, ap[0], ap[1], ap[2]); // strings
-      r.line(37, 31, 40.5, 33, 0.9, ap[0], ap[1], ap[2]);
-    }
-  }
-  if (o.cowl) {
-    // A hood worn down — slack cloth bunched on the shoulders.
-    r.ellipse(fx - 6, shoulderY - 1, 3.4, 2.8, over[0] * 0.6, over[1] * 0.6, over[2] * 0.6);
-    r.ellipse(fx + 6, shoulderY - 1, 3.4, 2.8, over[0] * 0.6, over[1] * 0.6, over[2] * 0.6);
-    r.ellipse(fx, shoulderY + 1.5, 4.5, 2, over[0] * 0.55, over[1] * 0.55, over[2] * 0.55);
-  }
-  if (o.belt) {
-    const bc = dour(o.belt.color);
-    if (o.belt.rope) {
-      r.line(24, 30, 40, 30, 1.1, bc[0], bc[1], bc[2]);
-      r.ellipse(30, 30.6, 1.2, 1.4, bc[0] * 1.3, bc[1] * 1.3, bc[2] * 1.3); // the knot
-    } else {
-      r.rect(24.5, 29, 39.5, 31.6, bc[0], bc[1], bc[2]);
-      if (o.belt.buckle) {
-        r.rect(30.8, 29.4, 33.2, 31.2, bc[0] * 1.7, bc[1] * 1.7, bc[2] * 1.7);
-        r.px(31.4, 30, bc[0] * 2.1, bc[1] * 2.1, bc[2] * 2.1);
-      }
-      if (o.belt.pouch) {
-        r.rect(34, 30.4, 37, 33.8, bc[0] * 0.8, bc[1] * 0.8, bc[2] * 0.8);
-        r.line(34, 31.4, 37, 31.4, 0.5, bc[0] * 1.3, bc[1] * 1.3, bc[2] * 1.3);
-      }
-    }
-  }
-
-  // Sleeves and hands over the cloth.
-  const sleeveC: RGB = [over[0] * 0.85, over[1] * 0.85, over[2] * 0.85];
-  const bare: RGB = [skin[0] * 0.92, skin[1] * 0.92, skin[2] * 0.92];
-  for (const [shx, elb, hand, side] of [
-    [24.5, elbL, handL, -1],
-    [39.5, elbR, hndR, 1],
-  ] as [number, [number, number], [number, number], -1 | 1][]) {
-    r.tube(shx, shoulderY + 1.2, elb[0], elb[1], 3.0, sleeveC[0], sleeveC[1], sleeveC[2]);
-    r.tube(elb[0], elb[1], hand[0], hand[1], 2.6, (o.rolledSleeves ? bare : sleeveC)[0], (o.rolledSleeves ? bare : sleeveC)[1], (o.rolledSleeves ? bare : sleeveC)[2]);
-    if (!o.rolledSleeves) r.line(hand[0], hand[1] - 2.4, hand[0], hand[1] - 1.2, 2.8, under[0], under[1], under[2]); // cuff
-    const grips = (o.props ?? []).some(
-      (p) => (p.hand === "L") === (side === -1) && ["staff", "halberd", "spadeShoulder", "spade", "peel", "rake", "whip"].includes(p.kind)
-    );
-    handR(r, hand[0], hand[1], skin, side, grips);
-  }
-
-  // Neck, head, face, front hair, headgear.
-  r.rect(fx - 1.5, headY + 3.8, fx + 1.5, shoulderY + 0.5, skin[0] * 0.55, skin[1] * 0.55, skin[2] * 0.55);
-  r.rect(fx - 1.5, headY + 3.8, fx, shoulderY + 0.5, skin[0] * 0.8, skin[1] * 0.8, skin[2] * 0.8);
-  faceR(r, fx, headY, skin, o.beard ?? false, o.hairColor ?? null);
-  hairFrontR(r, fx, headY, o.hair, o.hairColor, 0.76);
-  headgearR(r, o.head.kind, fx, headY, shoulderY, o.head.color, skin);
-
-  // Plague marks — dark stipple on the shift, throat and arms.
-  if (o.marks) {
-    const mc = o.marks;
-    r.px(28, 40 + bob, mc[0], mc[1], mc[2]);
-    r.px(36, 45 + bob, mc[0], mc[1], mc[2]);
-    r.px(31, 50 + bob, mc[0], mc[1], mc[2]);
-    r.px(fx - 1.5, headY + 5, mc[0], mc[1], mc[2]);
-  }
-
-  // Hand props, last — they read on the silhouette.
-  for (const p of o.props ?? []) {
-    const [hx, hy] = p.kind === "tray" ? [32, 33] : p.hand === "L" ? handL : hndR;
-    propR(r, p.kind, hx, hy, shoulderY);
-    // Carried props tuck under the palm — the hand stays visible on top.
-    if (["bundle", "basket", "bowl", "tankard"].includes(p.kind)) {
-      handR(r, hx, hy, skin, p.hand === "L" ? -1 : 1, false);
-    }
-  }
-}
-
-function rigFrame(o: Outfit, stance: Stance, phase: number, seed = 0): SpriteTex {
-  const r = new Ras();
-  figureRig(r, o, stance, phase, seed);
-  return finish(r.down());
-}
 
 // ---------------------------------------------------------------------------
 // The crowd — eight dressings plus the patrolman (index 8, never spawned as
 // a citizen). `villagerVariants` turns each into a four-phase walk cycle.
-const BONE: RGB = [176, 166, 146];
-const MAIL: RGB = [96, 100, 108];
-const VILLAGER_OUTFITS: Outfit[] = [
-  // 0 pilgrim — mud-brown ragged robe, rope belt, hood, satchel
-  { skin: [166, 128, 94], hair: "crop", hairColor: HAIR_COLORS[1], beard: true, under: BONE, hose: [44, 38, 30], boots: [30, 26, 22], over: { kind: "robe", color: [74, 58, 42], hem: 52, ragged: true, patches: true }, belt: { color: [58, 44, 28], rope: true }, head: { kind: "hood", color: [54, 42, 30] }, arms: "hang", props: [{ kind: "satchel", hand: "L" }] },
-  // 1 housewife — wool gown, bone kerchief, bibbed apron, basket
-  { skin: [172, 134, 98], hair: "shoulder", hairColor: HAIR_COLORS[2], under: BONE, hose: [52, 46, 38], boots: [34, 28, 22], over: { kind: "gown", color: [92, 64, 48], hem: 54 }, belt: { color: [60, 50, 36] }, apron: { color: BONE, bib: true, hem: 50 }, head: { kind: "kerchief", color: [190, 180, 160] }, arms: "carryL", props: [{ kind: "basket", hand: "L" }] },
-  // 2 tradesman — russet tunic, flat cap, a bundle under the arm
-  { skin: [174, 136, 100], hair: "crop", hairColor: HAIR_COLORS[2], beard: true, under: BONE, hose: [46, 40, 32], boots: [30, 26, 22], bootHigh: true, over: { kind: "tunic", color: [96, 52, 40], hem: 42, trim: [60, 34, 24] }, belt: { color: [52, 38, 24], buckle: true, pouch: true }, head: { kind: "flatcap", color: [50, 36, 28] }, arms: "carryL", props: [{ kind: "bundle", hand: "L" }] },
-  // 3 beggar — grey rags, barefoot, bowl held out
-  { skin: [152, 118, 88], hair: "shoulder", hairColor: HAIR_COLORS[3], under: [120, 114, 104], hose: [56, 50, 44], boots: [56, 50, 44], barefoot: true, over: { kind: "rags", color: [64, 60, 54], hem: 51, patches: true }, head: { kind: "kerchief", color: [56, 52, 46] }, arms: "holdOutR", props: [{ kind: "bowl", hand: "R" }], hunch: 0.55 },
-  // 4 clerk — ink-blue gown, soft cap, ledger to the chest
-  { skin: [168, 132, 98], hair: "crop", hairColor: HAIR_COLORS[0], under: BONE, hose: [38, 34, 30], boots: [30, 26, 22], over: { kind: "gown", color: [48, 54, 78], hem: 47 }, belt: { color: [36, 32, 24] }, head: { kind: "cap", color: [40, 36, 48] }, arms: "fold", props: [{ kind: "ledger", hand: "R" }] },
-  // 5 fieldhand — moss tunic, rolled sleeves, straw hat, rake
-  { skin: [180, 142, 102], hair: "crop", hairColor: HAIR_COLORS[2], beard: true, under: BONE, hose: [50, 44, 34], boots: [34, 28, 20], over: { kind: "tunic", color: [62, 68, 44], hem: 42 }, rolledSleeves: true, head: { kind: "strawhat" }, arms: "staffR", props: [{ kind: "rake", hand: "R" }] },
-  // 6 mourner — charcoal cloak and a hood that swallows the face
-  { skin: [160, 124, 94], under: [120, 116, 118], hose: [36, 32, 32], boots: [24, 22, 20], over: { kind: "cloak", color: [46, 44, 48], hem: 56, ragged: true }, head: { kind: "deepHood", color: [38, 36, 42] }, arms: "fold", hunch: 0.3 },
-  // 7 carter — oxblood tunic, hood down, whip trailing
-  { skin: [170, 130, 96], hair: "crop", hairColor: HAIR_COLORS[1], beard: true, under: BONE, hose: [42, 36, 30], boots: [30, 26, 22], bootHigh: true, over: { kind: "tunic", color: [84, 42, 36], hem: 45, patches: true }, cowl: true, belt: { color: [48, 34, 22], buckle: true }, head: { kind: "none" }, arms: "hang", props: [{ kind: "whip", hand: "R" }] },
-  // 8 patrolman — blue-grey tabard over mail, kettle helm, lantern
-  { skin: [168, 130, 96], hair: "crop", hairColor: HAIR_COLORS[1], under: MAIL, hose: [40, 44, 50], boots: [30, 26, 22], bootHigh: true, over: { kind: "tabard", color: [62, 76, 96], hem: 46 }, belt: { color: [46, 36, 24], buckle: true }, head: { kind: "kettlehelm" }, arms: "carryL", props: [{ kind: "lantern", hand: "L" }] },
-];
-
 // A villager frame — `phase` 0..1 across the walk cycle.
 function villagerFrame(phase: number, variant: number): SpriteTex {
-  return rigFrame(VILLAGER_OUTFITS[variant % VILLAGER_OUTFITS.length], "walk", phase, variant * 17 + 3);
+  return figurePix(VILLAGER_OUTFITS[variant % VILLAGER_OUTFITS.length], "walk", phase);
 }
 
 const WALK_PHASES = [0, 0.25, 0.5, 0.75];
@@ -1181,29 +443,25 @@ const IDLE_PHASES = [0, 0.5];
 
 // Sister Marguerite — dark habit, the white wimple that makes her the
 // brightest head in the quarter, hands folded. Unmistakable at distance.
-const NUN: Outfit = { skin: [170, 132, 98], under: BONE, hose: [40, 38, 46], boots: [26, 24, 30], over: { kind: "habit", color: [44, 42, 54], hem: 58 }, head: { kind: "wimple" }, arms: "fold" };
 function nunFrame(p: number): SpriteTex {
-  return rigFrame(NUN, "stand", p, 1);
+  return figurePix(NUN, "stand", p);
 }
 
 // Maître Aubert — olive robe, a full grey beard, the wide flat cap of an
 // apothecary, his satchel of physick slung over one shoulder.
-const AUBERT: Outfit = { skin: [170, 132, 96], hair: "bald", hairColor: HAIR_COLORS[3], beard: true, under: BONE, hose: [46, 40, 30], boots: [28, 24, 20], over: { kind: "robe", color: [78, 66, 40], hem: 54 }, belt: { color: [52, 38, 24] }, head: { kind: "flatcap", color: [52, 46, 30] }, arms: "hang", props: [{ kind: "satchel", hand: "L" }] };
 function aubertFrame(p: number): SpriteTex {
-  return rigFrame(AUBERT, "stand", p, 2);
+  return figurePix(AUBERT, "stand", p);
 }
 
 // Foulques the gravedigger — drab and broad, soil-stained apron, a spade
 // carried over the shoulder like a man who never puts it down.
-const DIGGER: Outfit = { skin: [176, 136, 98], hair: "crop", hairColor: HAIR_COLORS[1], beard: true, under: BONE, hose: [44, 38, 30], boots: [28, 24, 18], bootHigh: true, over: { kind: "tunic", color: [62, 52, 38], hem: 46 }, apron: { color: [70, 58, 44], hem: 50 }, belt: { color: [44, 34, 22] }, head: { kind: "flatcap", color: [40, 34, 26] }, arms: "staffR", props: [{ kind: "spadeShoulder", hand: "R" }] };
 function diggerFrame(p: number): SpriteTex {
-  return rigFrame(DIGGER, "stand", p, 3);
+  return figurePix(DIGGER, "stand", p);
 }
 
 // Widow Lambert — black mourning veil over the face, grey bun pinned up.
-const WIDOW: Outfit = { skin: [162, 126, 96], hair: "bun", hairColor: HAIR_COLORS[3], under: BONE, hose: [38, 34, 36], boots: [26, 24, 24], over: { kind: "gown", color: [56, 44, 50], hem: 56 }, belt: { color: [40, 34, 38] }, head: { kind: "widowveil" }, arms: "fold" };
 function widowFrame(p: number): SpriteTex {
-  return rigFrame(WIDOW, "stand", p, 4);
+  return figurePix(WIDOW, "stand", p);
 }
 
 // Evidence marks — a stain and scratches on the ground, examined not taken.
@@ -1265,72 +523,62 @@ function cureSprite(): SpriteTex {
 }
 // Provost's cordon guard — drab tabard with a red cross over mail, kettle
 // helm, the halberd shouldered. Reads as a different unit from the patrol.
-const GUARD: Outfit = { skin: [166, 128, 94], hair: "crop", hairColor: HAIR_COLORS[1], under: MAIL, hose: [38, 42, 48], boots: [28, 24, 20], bootHigh: true, over: { kind: "tabard", color: [70, 64, 52], hem: 46 }, insignia: [120, 40, 36], belt: { color: [44, 34, 22], buckle: true }, head: { kind: "kettlehelm" }, arms: "staffR", props: [{ kind: "halberd", hand: "R" }] };
 function guardFrame(phase: number): SpriteTex {
-  return rigFrame(GUARD, "stand", phase, 9);
+  return figurePix(GUARD, "stand", phase);
 }
 
 // Mistress Hélène, the innkeeper — russet dress, a clean white apron bib
 // to hem, kerchief, a tankard never far from her hand.
-const INNKEEP: Outfit = { skin: [172, 134, 98], hair: "shoulder", hairColor: HAIR_COLORS[2], under: BONE, hose: [52, 44, 36], boots: [32, 26, 20], over: { kind: "gown", color: [96, 52, 40], hem: 54 }, belt: { color: [60, 40, 28] }, apron: { color: [196, 188, 168], bib: true, hem: 52 }, head: { kind: "kerchief", color: [210, 204, 190] }, arms: "carryL", props: [{ kind: "tankard", hand: "R" }] };
 function innkeepFrame(p: number): SpriteTex {
-  return rigFrame(INNKEEP, "stand", p, 5);
+  return figurePix(INNKEEP, "stand", p);
 }
 
 // Baker Colin — flour-dusted apron over rolled sleeves, the pale round
 // cap, a peel paddle in hand. You can smell the ovens off him.
-const BAKER: Outfit = { skin: [178, 140, 104], hair: "crop", hairColor: HAIR_COLORS[2], under: BONE, hose: [50, 44, 34], boots: [30, 26, 22], over: { kind: "tunic", color: [92, 78, 60], hem: 48 }, rolledSleeves: true, belt: { color: [64, 48, 32] }, apron: { color: [202, 196, 180], hem: 52 }, head: { kind: "bakercap" }, arms: "raiseR", props: [{ kind: "peel", hand: "R" }] };
 function bakerFrame(p: number): SpriteTex {
-  return rigFrame(BAKER, "stand", p, 6);
+  return figurePix(BAKER, "stand", p);
 }
 
 // The alchemist — midnight robe and a high collar, wild grey hair, gaunt
 // eyes with a feverish green glint, a vial of something wrong at his belt.
-const ALCHEMIST: Outfit = { skin: [158, 128, 98], hair: "shoulder", hairColor: HAIR_COLORS[3], beard: true, under: [140, 130, 120], hose: [30, 28, 34], boots: [22, 20, 26], over: { kind: "robe", color: [36, 38, 52], hem: 57, trim: [150, 120, 60] }, belt: { color: [44, 36, 28], pouch: true }, head: { kind: "cap", color: [30, 30, 40] }, arms: "holdOutR", props: [{ kind: "vial", hand: "R" }], hunch: 0.15 };
 function alchemistFrame(p: number): SpriteTex {
-  return rigFrame(ALCHEMIST, "stand", p, 7);
+  return figurePix(ALCHEMIST, "stand", p);
 }
 
 // A patient of the pesthouse — a pale shift hanging off him, hunched and
 // hugging himself against the fever, the dark marks showing.
-const PATIENT: Outfit = { skin: [186, 172, 152], hair: "crop", hairColor: HAIR_COLORS[1], under: [200, 194, 180], hose: [100, 96, 88], boots: [168, 156, 138], barefoot: true, over: { kind: "rags", color: [116, 110, 100], hem: 52 }, head: { kind: "none" }, arms: "hug", hunch: 0.45, marks: [90, 40, 50] };
 function patientFrame(p: number): SpriteTex {
-  return rigFrame(PATIENT, "stand", p, 8);
+  return figurePix(PATIENT, "stand", p);
 }
 
 // The grey man — all cloak and shadow, a hood with nothing inside it, the
 // hem dragging the ground. The shape you tail through the dark.
-const HOODED: Outfit = { skin: [24, 22, 28], under: [50, 48, 56], hose: [40, 38, 44], boots: [30, 28, 34], over: { kind: "cloak", color: [58, 56, 64], hem: 58, ragged: true }, head: { kind: "deepHood", color: [66, 64, 74] }, arms: "hang" };
 function hoodedFrame(p: number): SpriteTex {
-  return rigFrame(HOODED, "stand", p, 10);
+  return figurePix(HOODED, "stand", p);
 }
 
 // The herbwife — moss robes and a grey-green kerchief, a darker apron, a
 // bunch of rue held up where the customer can see it.
-const HERBWIFE: Outfit = { skin: [172, 136, 98], hair: "bun", hairColor: HAIR_COLORS[3], under: BONE, hose: [44, 40, 34], boots: [30, 26, 20], over: { kind: "gown", color: [58, 70, 46], hem: 52 }, belt: { color: [50, 40, 26] }, apron: { color: [62, 58, 40], hem: 48 }, head: { kind: "kerchief", color: [84, 94, 70] }, arms: "holdOutR", props: [{ kind: "rue", hand: "R" }] };
 function herbwifeFrame(p: number): SpriteTex {
-  return rigFrame(HERBWIFE, "stand", p, 11);
+  return figurePix(HERBWIFE, "stand", p);
 }
 
 // The clothier — madder-red robe, a merchant's flat cap, a length of pale
 // linen draped over his arm so it hangs in two falls.
-const CLOTHIER: Outfit = { skin: [174, 134, 98], hair: "crop", hairColor: HAIR_COLORS[0], under: BONE, hose: [44, 38, 34], boots: [30, 26, 22], over: { kind: "tunic", color: [88, 44, 42], hem: 48, trim: [160, 140, 110] }, belt: { color: [56, 40, 26], buckle: true, pouch: true }, head: { kind: "flatcap", color: [52, 40, 34] }, arms: "carryL", props: [{ kind: "clothbolt", hand: "L" }] };
 function clothierFrame(p: number): SpriteTex {
-  return rigFrame(CLOTHIER, "stand", p, 12);
+  return figurePix(CLOTHIER, "stand", p);
 }
 
 // The costermonger — brown robe under a leather apron, flat cap, a tray of
 // round loaves held out before him.
-const MONGER: Outfit = { skin: [176, 138, 100], hair: "crop", hairColor: HAIR_COLORS[2], beard: true, under: BONE, hose: [46, 40, 32], boots: [32, 26, 20], over: { kind: "tunic", color: [78, 60, 40], hem: 47 }, apron: { color: [74, 52, 34], hem: 50 }, head: { kind: "flatcap", color: [52, 40, 30] }, arms: "trayBoth", props: [{ kind: "tray", hand: "R" }] };
 function mongerFrame(p: number): SpriteTex {
-  return rigFrame(MONGER, "stand", p, 13);
+  return figurePix(MONGER, "stand", p);
 }
 
 // Mother Anette — the rag-and-bone woman, faded mauve under a patched
 // shawl, grey bun pinned at the back. No shop; she sells gossip.
-const ANETTE: Outfit = { skin: [168, 130, 96], hair: "bun", hairColor: HAIR_COLORS[4], under: BONE, hose: [46, 42, 40], boots: [30, 26, 22], over: { kind: "gown", color: [72, 60, 64], hem: 52, patches: true }, shawl: { color: [60, 50, 54], hem: 36 }, head: { kind: "none" }, arms: "fold" };
 function anetteFrame(p: number): SpriteTex {
-  return rigFrame(ANETTE, "stand", p, 14);
+  return figurePix(ANETTE, "stand", p);
 }
 
 // A shrouded corpse laid out for autopsy on a stone slab.
@@ -1574,6 +822,8 @@ export function buildSpriteKinds(): Record<string, SpriteKind> {
     digger: { frames: IDLE_PHASES.map((p) => diggerFrame(p)), scale: 0.801, block: 0.18, animFps: 0.6 },
     widow: { frames: IDLE_PHASES.map((p) => widowFrame(p)), scale: 0.801, block: 0.18, animFps: 0.6 },
     guard: { frames: WALK_PHASES.map((p) => guardFrame(p)), scale: 0.819, block: 0.18, animFps: 1.6 },
+    // PROTOTYPE: the native-pixel guard from pixelart.ts, posted beside the
+    // provost so the two styles can be judged in-world side by side.
     innkeep: { frames: IDLE_PHASES.map((p) => innkeepFrame(p)), scale: 0.801, block: 0.18, animFps: 0.6 },
     baker: { frames: IDLE_PHASES.map((p) => bakerFrame(p)), scale: 0.801, block: 0.18, animFps: 0.6 },
     alchemist: { frames: IDLE_PHASES.map((p) => alchemistFrame(p)), scale: 0.801, block: 0.18, animFps: 0.6 },
