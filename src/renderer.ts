@@ -984,8 +984,8 @@ export class Renderer {
     this.ctx.imageSmoothingEnabled = false;
     if (!lantern) return;
     // Size in screen pixels regardless of the bitmap's resolution — the
-    // lantern should fill about a third of the view's height.
-    const dh = H * 0.36;
+    // lantern should fill about half of the view's height.
+    const dh = H * 0.52;
     const dw = dh * (lantern.width / lantern.height);
     const x0 = W * 0.3 - swayX - dw / 2;
     const y0 = H - dh * 0.82 + swayY;

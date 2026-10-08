@@ -6,9 +6,9 @@ export const INTERNAL_HEIGHT = 270;
 export const TEX_SIZE = 64;
 
 // The eye's height above the floor as a fraction of one storey. Figures
-// stand ~0.8 storeys tall with their eyes near the top, so 0.66 puts the
-// player level with the people instead of looking up at them.
-export const EYE_H = 0.66;
+// stand ~0.78 storeys tall with their eyes near the top, so 0.68 puts the
+// player eye to eye with the townsfolk — the watch, at 0.9, looms over you.
+export const EYE_H = 0.68;
 
 // Camera
 export const FOV = Math.PI / 2.6; // ~69 degrees
