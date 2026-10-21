@@ -313,8 +313,19 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
     box.appendChild(hint);
   }
 
+  let lastNeeds = "";
+  let lastClock = "";
+  let lastPrompt = "";
+  let lastQuest = "";
+  const lastInv: Record<string, number> = {};
+
   return {
     setNeeds(h, hu, t, f) {
+      // Called every frame — style writes force a recalc, so only touch the
+      // bars when a value actually moved.
+      const key = `${h}|${hu}|${t}|${f}`;
+      if (key === lastNeeds) return;
+      lastNeeds = key;
       health.style.width = `${h}%`;
       hunger.style.width = `${hu}%`;
       thirst.style.width = `${t}%`;
@@ -324,18 +335,17 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
       fatigue.parentElement!.classList.toggle("empty", f < 22);
     },
     setClock(text) {
+      if (text === lastClock) return;
+      lastClock = text;
       clock.textContent = text;
     },
     setInventory(inv) {
       for (const def of SLOTS) {
-        if (def.id === "sous") {
-          counts.sous.textContent = `${inv.sous}`;
-          slots.sous.classList.toggle("empty", inv.sous === 0);
-        } else {
-          const n = count(inv, def.id as ItemId);
-          counts[def.id].textContent = `${n}`;
-          slots[def.id].classList.toggle("empty", n === 0);
-        }
+        const n = def.id === "sous" ? inv.sous : count(inv, def.id as ItemId);
+        if (n === lastInv[def.id]) continue;
+        lastInv[def.id] = n;
+        counts[def.id].textContent = `${n}`;
+        slots[def.id].classList.toggle("empty", n === 0);
       }
     },
     flashSlot(id, ok) {
@@ -356,9 +366,14 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
     },
     refreshPanel,
     setPrompt(text) {
+      const key = text ?? "";
+      if (key === lastPrompt) return;
+      lastPrompt = key;
       prompt.textContent = text ? `◆ [${keyName(binds.interact)}] ${text} ◆` : "";
     },
     setQuest(text) {
+      if (text === lastQuest) return;
+      lastQuest = text;
       questEl.textContent = text;
     },
     setDialog(speaker, text, more = true, topics) {

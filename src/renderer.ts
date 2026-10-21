@@ -9,7 +9,7 @@ import {
   LIGHT_BANDS,
   TEX_SIZE,
 } from "./config";
-import { computeFlicker, lightAt } from "./lighting";
+import { computeFlicker, lightAtGrid, LightGrid, splatLights } from "./lighting";
 import { settings } from "./settings";
 import type { LightSample } from "./lighting";
 import type { GameMap, LightDef, PropFace, SpriteRuntime, Texture, TextureSet } from "./types";
@@ -88,6 +88,9 @@ export class Renderer {
   private fogFar = 1;
   private time = 0;
   private mapRef: GameMap | null = null;
+  // The frame's baked light field — lamps splat into it once, then every
+  // pixel samples the grid instead of walking the lamp list.
+  private grid: LightGrid | null = null;
 
   // Warmth of the ambient light at the last ambientAt() call site — indoors
   // the gloom reads as hearth embers rather than cold moonlight. Set before
@@ -144,6 +147,10 @@ export class Renderer {
     this.fogFar = fogFar;
     this.time = t;
     this.mapRef = map;
+    if (!this.grid || this.grid.w !== map.w || this.grid.h !== map.h) {
+      this.grid = new LightGrid(map.w, map.h);
+    }
+    splatLights(this.grid, lights, flick);
 
     const dirX = Math.cos(player.angle);
     const dirY = Math.sin(player.angle);
@@ -152,10 +159,10 @@ export class Renderer {
     const planeY = dirX * planeLen;
     const horizon = H / 2 + player.pitch + player.bob;
 
-    this.castFloorCeiling(map, tex, lights, flick, player, horizon, dirX, dirY, planeX, planeY);
-    this.castWalls(map, tex, lights, flick, player, horizon, dirX, dirY, planeX, planeY);
-    this.castProps(map, tex, lights, flick, player, horizon, dirX, dirY, planeX, planeY);
-    this.castSprites(sprites, lights, flick, player, horizon, dirX, dirY, planeX, planeY, t);
+    this.castFloorCeiling(map, tex, player, horizon, dirX, dirY, planeX, planeY);
+    this.castWalls(map, tex, player, horizon, dirX, dirY, planeX, planeY);
+    this.castProps(map, tex, player, horizon, dirX, dirY, planeX, planeY);
+    this.castSprites(sprites, player, horizon, dirX, dirY, planeX, planeY, t);
 
     // Post pass: film grain + palette posterisation, one sweep.
     // Each channel snaps to POSTER_STEP levels with Bayer dither on the
@@ -183,8 +190,6 @@ export class Renderer {
   private castFloorCeiling(
     map: GameMap,
     tex: TextureSet,
-    lights: LightDef[],
-    flick: Float64Array,
     player: Player,
     horizon: number,
     dirX: number,
@@ -199,6 +204,13 @@ export class Renderer {
     const rrY = dirY + planeY;
     // Camera-plane units per radian ≈ radians of azimuth per screen pixel.
     const pxPerRad = W / Math.hypot(rrX - rlX, rrY - rlY);
+    const mw = map.w;
+    const facade = (nx: number, ny: number): boolean =>
+      nx >= 0 &&
+      ny >= 0 &&
+      nx < mw &&
+      ny < map.h &&
+      (map.walls[ny * mw + nx] !== 0 || map.openSkin[ny * mw + nx] !== 0);
 
     for (let y = 0; y < H; y++) {
       const p = y - horizon;
@@ -271,13 +283,6 @@ export class Renderer {
             // street. Only open-air cobbles; interior floors keep their
             // own edges, and openSkin covers doorways cut from the facade.
             if (isFloor && texId === 4 && map.ceilTex[cell] === 2) {
-              const mw = map.w;
-              const facade = (nx: number, ny: number): boolean =>
-                nx >= 0 &&
-                ny >= 0 &&
-                nx < map.w &&
-                ny < map.h &&
-                (map.walls[ny * mw + nx] !== 0 || map.openSkin[ny * mw + nx] !== 0);
               if (
                 (vv < 0.32 && facade(cx, cy - 1)) ||
                 (vv > 0.68 && facade(cx, cy + 1)) ||
@@ -316,7 +321,7 @@ export class Renderer {
               }
             } else {
               const t = (isFloor ? tex.floors : tex.ceils)[texId];
-              lightAt(sx, sy, lights, flick, this.ambientAt(sx, sy), this.ambWarm, this.sample);
+              lightAtGrid(this.grid!, sx, sy, this.ambientAt(sx, sy), this.ambWarm, this.sample);
               // Ceilings hang above the flames — dim them.
               const dim = isFloor ? 1 : 0.55;
               // Cast shadows — step sunward from the ground point; a wall
@@ -368,8 +373,6 @@ export class Renderer {
   private castWalls(
     map: GameMap,
     tex: TextureSet,
-    lights: LightDef[],
-    flick: Float64Array,
     player: Player,
     horizon: number,
     dirX: number,
@@ -488,7 +491,7 @@ export class Renderer {
 
         // Light sampled once at the hit point — per-column lighting is enough
         // at this resolution and keeps the banding coherent.
-        lightAt(hx, hy, lights, flick, this.ambientAt(hx - rx * 0.04, hy - ry * 0.04), this.ambWarm, this.sample);
+        lightAtGrid(this.grid!, hx, hy, this.ambientAt(hx - rx * 0.04, hy - ry * 0.04), this.ambWarm, this.sample);
         let bright = Math.min(1, this.sample.bright);
         bright = Math.floor(bright * bandNorm) / bandNorm;
         if (side === 1) bright *= 0.72; // N/S faces darker — depth cue
@@ -553,7 +556,7 @@ export class Renderer {
       // Lintel/sill overlay for the nearest opening the ray passed through —
       // drawn last so it sits on top of every wall leg beyond it.
       if (openIdx >= 0) {
-        this.renderOpening(map, tex, lights, flick, player, horizon, rx, ry, x, openIdx, openPerp, openSide);
+        this.renderOpening(map, tex, player, horizon, rx, ry, x, openIdx, openPerp, openSide);
       }
     }
   }
@@ -566,8 +569,6 @@ export class Renderer {
   private renderOpening(
     map: GameMap,
     tex: TextureSet,
-    lights: LightDef[],
-    flick: Float64Array,
     player: Player,
     horizon: number,
     rx: number,
@@ -615,7 +616,7 @@ export class Renderer {
         : innerId;
     const isWindow = map.windows.has(openIdx);
 
-    lightAt(hx, hy, lights, flick, this.ambientAt(hx - rx * 0.04, hy - ry * 0.04), this.ambWarm, this.sample);
+    lightAtGrid(this.grid!, hx, hy, this.ambientAt(hx - rx * 0.04, hy - ry * 0.04), this.ambWarm, this.sample);
     let bright = Math.min(1, this.sample.bright);
     bright = Math.floor(bright * bandNorm) / bandNorm;
     if (openSide === 1) bright *= 0.72;
@@ -669,8 +670,6 @@ export class Renderer {
   private castProps(
     map: GameMap,
     tex: TextureSet,
-    lights: LightDef[],
-    flick: Float64Array,
     player: Player,
     horizon: number,
     dirX: number,
@@ -756,7 +755,7 @@ export class Renderer {
             const ti =
               (Math.min(TEX_SIZE - 1, Math.floor(v * TEX_SIZE)) * TEX_SIZE +
                 Math.min(TEX_SIZE - 1, Math.floor(u * TEX_SIZE))) * 3;
-            lightAt(fx, fy, lights, flick, this.ambientAt(fx, fy), this.ambWarm, this.sample);
+            lightAtGrid(this.grid!, fx, fy, this.ambientAt(fx, fy), this.ambWarm, this.sample);
             // Upward lids take the sun full-on; undersides never do.
             let bright = Math.min(1, this.sample.bright) * f.shade * (below ? 1 + this.daylight * 0.75 * this.sunElev : 1);
             bright = Math.floor(Math.min(1, bright) * bandNorm) / bandNorm;
@@ -811,7 +810,7 @@ export class Renderer {
         const texX = Math.min(TEX_SIZE - 1, Math.floor(hit.u * TEX_SIZE));
         const hx = player.x + hit.t * rx;
         const hy = player.y + hit.t * ry;
-        lightAt(hx, hy, lights, flick, this.ambientAt(hx, hy), this.ambWarm, this.sample);
+        lightAtGrid(this.grid!, hx, hy, this.ambientAt(hx, hy), this.ambWarm, this.sample);
         let bright = Math.min(1, this.sample.bright) * f.shade;
         // Live sunlight — faces with a bearing turned toward the sun catch
         // it, the lee dims. Faces without one (tent mouths, dark throats)
@@ -854,8 +853,6 @@ export class Renderer {
   // Billboard sprites, far-to-near, clipped per column by the wall z-buffer.
   private castSprites(
     sprites: SpriteRuntime[],
-    lights: LightDef[],
-    flick: Float64Array,
     player: Player,
     horizon: number,
     dirX: number,
@@ -866,9 +863,10 @@ export class Renderer {
   ): void {
     const buf = this.buf;
     const bandNorm = LIGHT_BANDS - 1;
-    const order = sprites
-      .map((s) => ({ s, d: (s.x - player.x) ** 2 + (s.y - player.y) ** 2 }))
-      .sort((a, b) => b.d - a.d);
+    // The caller builds this list fresh each frame — sort it in place
+    // (far to near) rather than allocating a wrapper object per sprite.
+    const order = sprites;
+    order.sort((a, b) => (b.x - player.x) ** 2 + (b.y - player.y) ** 2 - ((a.x - player.x) ** 2 + (a.y - player.y) ** 2));
 
     const invDet = 1 / (planeX * dirY - dirX * planeY);
     // Billboards draw as world-space segments perpendicular to the view axis
@@ -879,7 +877,7 @@ export class Renderer {
     const rgtX = planeX / plen;
     const rgtY = planeY / plen;
 
-    for (const { s } of order) {
+    for (const s of order) {
       if (s.taken) continue;
       const frame =
         s.frames[
@@ -905,9 +903,9 @@ export class Renderer {
         let lo = Infinity;
         let hi = -Infinity;
         let behind = false;
-        for (const [vx, vy] of [[x0, y0], [x1, y1]] as const) {
-          const rx = vx - player.x;
-          const ry = vy - player.y;
+        for (let e = 0; e < 2; e++) {
+          const rx = (e === 0 ? x0 : x1) - player.x;
+          const ry = (e === 0 ? y0 : y1) - player.y;
           const txv = invDet * (dirY * rx - dirX * ry);
           const tyv = invDet * (-planeY * rx + planeX * ry);
           if (tyv < 0.15) { behind = true; break; }
@@ -922,7 +920,7 @@ export class Renderer {
         }
       }
 
-      lightAt(s.x, s.y, lights, flick, this.ambientAt(s.x, s.y), this.ambWarm, this.sample);
+      lightAtGrid(this.grid!, s.x, s.y, this.ambientAt(s.x, s.y), this.ambWarm, this.sample);
       let bright = Math.min(1, this.sample.bright);
       bright = Math.floor(bright * bandNorm) / bandNorm;
       const trC = lerp(COOL.r, WARM.r, this.sample.warm);
