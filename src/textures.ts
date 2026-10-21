@@ -376,16 +376,17 @@ function quarantineWall(): Texture {
 
 // The quarter's upper storeys — windows boarded across, so nothing inside
 // ever glows. No lit variant: a nailed-shut window is dark forever.
-function quarantineUpperWall(): Texture {
+function quarantineUpperWall(seed = 103): Texture {
   const tex = makeTex();
-  const rand = rng(103);
+  const rand = rng(seed);
   for (let y = 0; y < TEX_SIZE; y++) {
     for (let x = 0; x < TEX_SIZE; x++) setPx(tex, x, y, 84, 78, 66);
   }
   const oak = { r: 44, g: 32, b: 21 };
   for (const sx of [2, 22, 42, 62]) rect3(tex, sx, 0, sx + 2, TEX_SIZE - 1, oak.r, oak.g, oak.b);
   rect3(tex, 0, 50, TEX_SIZE - 1, 53, oak.r, oak.g, oak.b);
-  for (const [x0, x1] of [[9, 18], [44, 53]] as const) {
+  const wins: [number, number][] = seed === 103 ? [[9, 18], [44, 53]] : [[26, 35]];
+  for (const [x0, x1] of wins) {
     // The opening, then planks nailed haphazard across it.
     rect3(tex, x0, 18, x1, 40, 24, 20, 14);
     for (let i = 0; i < 3; i++) {
@@ -420,9 +421,9 @@ function doorLeafMarked(): Texture {
 
 // Half-timbered plaster — the classic Parisian facade. Warm plaster bays with
 // per-bay tint, dark oak studs and rails, and X-braces in the middle bays.
-function timberWall(): Texture {
+function timberWall(win: [number, number, number, number] | null = [8, 22, 18, 40]): Texture {
   const tex = makeTex();
-  const rand = rng(61);
+  const rand = rng(61 + (win === null ? 11 : 0));
   // Plaster bays — each bay gets its own weathered tint.
   for (let y = 0; y < TEX_SIZE; y++) {
     for (let x = 0; x < TEX_SIZE; x++) {
@@ -469,12 +470,15 @@ function timberWall(): Texture {
     }
   }
   // A shut window in the first bay — leaded panes behind warped shutters.
-  rect3(tex, 8, 22, 18, 40, 44, 32, 20);
-  rect3(tex, 10, 24, 16, 38, 18, 20, 28);
-  rect3(tex, 12, 24, 13, 38, 44, 32, 20);
-  rect3(tex, 10, 30, 16, 31, 44, 32, 20);
-  rect3(tex, 8, 22, 18, 23, 64, 48, 30); // lintel
-  rect3(tex, 8, 40, 18, 42, 60, 44, 28); // sill
+  if (win) {
+    const [wx0, wy0, wx1, wy1] = win;
+    rect3(tex, wx0, wy0, wx1, wy1, 44, 32, 20);
+    rect3(tex, wx0 + 2, wy0 + 2, wx1 - 2, wy1 - 2, 18, 20, 28);
+    rect3(tex, wx0 + 4, wy0 + 2, wx0 + 5, wy1 - 2, 44, 32, 20);
+    rect3(tex, wx0 + 2, wy0 + 8, wx1 - 2, wy0 + 9, 44, 32, 20);
+    rect3(tex, wx0, wy0, wx1, wy0 + 1, 64, 48, 30); // lintel
+    rect3(tex, wx0, wy1, wx1, wy1 + 2, 60, 44, 28); // sill
+  }
   // Nail heads where the studs cross the rails.
   for (const nx of [3, 23, 43]) {
     for (const ny of [16, 48]) rect3(tex, nx, ny, nx + 1, ny + 1, 20, 16, 12);
@@ -796,9 +800,24 @@ function upperWindow(tex: Texture, x0: number, x1: number, lit: boolean): void {
 }
 
 // Upper storey of a half-timbered house — plaster, studs, shuttered windows.
-function timberUpperWall(lit: boolean): Texture {
+// A jetty's shadow — the overhanging upper storey casts a dark seam where
+// it meets the wall below, with corbel brackets under the projection.
+function jettyShadow(tex: Texture): void {
+  for (let x = 0; x < TEX_SIZE; x++) {
+    for (let y = 57; y < TEX_SIZE; y++) {
+      const i3 = (y * TEX_SIZE + x) * 3;
+      const f = 0.85 - (y - 57) * 0.11;
+      tex.data[i3] *= f;
+      tex.data[i3 + 1] *= f;
+      tex.data[i3 + 2] *= f;
+    }
+  }
+  for (const bx of [8, 30, 52]) rect3(tex, bx, 54, bx + 4, 62, 34, 24, 16);
+}
+
+function timberUpperWall(lit: boolean, wins: [number, number][] = [[9, 18], [44, 53]], braces = true): Texture {
   const tex = makeTex();
-  const rand = rng(lit ? 63 : 61);
+  const rand = rng((lit ? 63 : 61) + wins.length * 7);
   for (let y = 0; y < TEX_SIZE; y++) {
     for (let x = 0; x < TEX_SIZE; x++) {
       const bay = Math.floor(x / 20);
@@ -809,23 +828,25 @@ function timberUpperWall(lit: boolean): Texture {
   for (const sx of [2, 22, 42, 62]) rect3(tex, sx, 0, sx + 3, TEX_SIZE - 1, 56, 40, 26);
   rect3(tex, 0, 50, TEX_SIZE - 1, 54, 56, 40, 26);
   // Braces under the eaves rail.
-  for (let i = 0; i < 10; i++) {
-    const y = 2 + i;
-    for (let t = 0; t < 3; t++) {
-      setPx(tex, 26 + i + t, y, 56, 40, 26);
-      setPx(tex, 36 - i - t, y, 56, 40, 26);
+  if (braces) {
+    for (let i = 0; i < 10; i++) {
+      const y = 2 + i;
+      for (let t = 0; t < 3; t++) {
+        setPx(tex, 26 + i + t, y, 56, 40, 26);
+        setPx(tex, 36 - i - t, y, 56, 40, 26);
+      }
     }
   }
-  upperWindow(tex, 9, 18, lit);
-  upperWindow(tex, 44, 53, lit);
+  for (const [x0, x1] of wins) upperWindow(tex, x0, x1, lit);
+  jettyShadow(tex);
   addNoise(tex, rand, 9);
   return tex;
 }
 
 // Upper storey of a stone building — coursed stone with narrow windows.
-function stoneUpperWall(lit: boolean): Texture {
+function stoneUpperWall(lit: boolean, wins: [number, number][] = [[10, 19], [42, 51]]): Texture {
   const tex = makeTex();
-  const rand = rng(lit ? 73 : 71);
+  const rand = rng((lit ? 73 : 71) + wins.length * 5);
   for (let y = 0; y < TEX_SIZE; y++) {
     for (let x = 0; x < TEX_SIZE; x++) {
       const mortar = y % 16 < 2 || (x + Math.floor(y / 16) * 16) % 32 < 2;
@@ -833,7 +854,7 @@ function stoneUpperWall(lit: boolean): Texture {
       else setPx(tex, x, y, 92, 88, 84);
     }
   }
-  for (const [x0, x1] of [[10, 19], [42, 51]] as const) {
+  for (const [x0, x1] of wins) {
     rect3(tex, x0 - 1, 13, x1 + 1, 15, 58, 55, 52); // lintel
     rect3(tex, x0, 16, x1, 44, 52, 50, 48);
     for (let y = 18; y < 43; y++) {
@@ -850,9 +871,9 @@ function stoneUpperWall(lit: boolean): Texture {
 }
 
 // Upper storey of a brick building — dark brick with slit windows.
-function brickUpperWall(lit: boolean): Texture {
+function brickUpperWall(lit: boolean, wins: [number, number][] = [[12, 20], [44, 52]]): Texture {
   const tex = makeTex();
-  const rand = rng(lit ? 77 : 75);
+  const rand = rng((lit ? 77 : 75) + wins.length * 3);
   for (let y = 0; y < TEX_SIZE; y++) {
     for (let x = 0; x < TEX_SIZE; x++) {
       const mortar = y % 8 < 1 || (x + Math.floor(y / 8) * 8) % 16 < 1;
@@ -864,7 +885,7 @@ function brickUpperWall(lit: boolean): Texture {
       }
     }
   }
-  for (const [x0, x1] of [[12, 20], [44, 52]] as const) {
+  for (const [x0, x1] of wins) {
     // Lintel above, sill below — windows sit in the wall, not on it.
     rect3(tex, x0 - 1, 12, x1 + 1, 14, 34, 32, 30);
     rect3(tex, x0, 14, x1, 46, 40, 38, 36);
@@ -935,6 +956,47 @@ function roofTile(): Texture {
     for (let x = 0; x < TEX_SIZE; x++) {
       const f = 0.5 - (y - 54) * 0.03;
       setPx(tex, x, y, 24 * f + 9, 22 * f + 8, 24 * f + 10);
+    }
+  }
+  addNoise(tex, rand, 8);
+  return tex;
+}
+
+// Roof planes — the same slate and tile courses, but drawn to tile
+// seamlessly over a whole pitched slope: no ridge cap, no eaves band.
+function roofSlatePlane(): Texture {
+  const tex = makeTex();
+  const rand = rng(215);
+  const ch = 7;
+  for (let y = 0; y < TEX_SIZE; y++) {
+    const row = Math.floor(y / ch);
+    const off = (row % 2) * 5;
+    for (let x = 0; x < TEX_SIZE; x++) {
+      const seam = (x + off) % 10 < 1 || y % ch < 1;
+      const tileSeed = row * 23 + Math.floor((x + off) / 10) * 11;
+      let shade = 42 + ((tileSeed * 2654435761) % 16);
+      if ((tileSeed * 131) % 29 === 0) shade += 16;
+      else if ((tileSeed * 173) % 31 === 0) shade -= 14;
+      if (seam) setPx(tex, x, y, 20, 22, 28);
+      else setPx(tex, x, y, shade - 4, shade, shade + 10);
+    }
+  }
+  addNoise(tex, rand, 7);
+  return tex;
+}
+
+function roofTilePlane(): Texture {
+  const tex = makeTex();
+  const rand = rng(227);
+  const ch = 8;
+  for (let y = 0; y < TEX_SIZE; y++) {
+    const row = Math.floor(y / ch);
+    for (let x = 0; x < TEX_SIZE; x++) {
+      const within = y % ch;
+      const scallop = Math.sin((x / 8) * Math.PI);
+      const shade = 66 + scallop * 22 + ((row * 13 + Math.floor(x / 8) * 7) % 10);
+      if (within < 1) setPx(tex, x, y, 34, 20, 14);
+      else setPx(tex, x, y, shade + 18, shade * 0.62, shade * 0.42);
     }
   }
   addNoise(tex, rand, 8);
@@ -1578,15 +1640,40 @@ export function buildTextures(): TextureSet {
     foliageWall(), // 27 — clipped leaf mass: trees, shrubs, window boxes
     rockWall(), // 28 — uncoursed mountain granite: the high pass
     snowCragWall(), // 29 — the same crag snow-capped: the ridge's crest cells
+    timberUpperWall(false, [[24, 33]], false), // 30 — one centred window
+    timberUpperWall(true, [[24, 33]], false), // 31 — lit
+    timberUpperWall(false, [], false), // 32 — windowless: gable ends too
+    stoneUpperWall(false, [[26, 35]]), // 33 — one off-centre slit
+    stoneUpperWall(true, [[26, 35]]), // 34 — lit
+    brickUpperWall(false, [[26, 34]]), // 35 — one shifted slit
+    brickUpperWall(true, [[26, 34]]), // 36 — lit
+    quarantineUpperWall(151), // 37 — boards over a different bay
+    timberWall(null), // 38 — ground bay, no window
+    timberWall([44, 24, 54, 40]), // 39 — window in the far bay
+    roofSlatePlane(), // 40 — slate courses, tiles over a whole slope
+    roofTilePlane(), // 41 — terracotta courses, same
   ].map(grade);
   // Facade ids that have a candle-lit version for night-time.
   const wallsLit = new Uint8Array(walls.length);
   wallsLit[7] = 8;
   wallsLit[9] = 10;
   wallsLit[11] = 12;
+  wallsLit[30] = 31;
+  wallsLit[33] = 34;
+  wallsLit[35] = 36;
+  // Per-cell alternates — a facade face hashes its cell index into this
+  // list so windows don't stamp the same bay on every cell of a street.
+  const wallVariants: Record<number, number[]> = {
+    5: [5, 38, 39],
+    7: [7, 30, 32],
+    9: [9, 33],
+    11: [11, 35],
+    21: [21, 37],
+  };
   return {
     walls,
     wallsLit,
+    wallVariants,
     floors: [makeTex(), flagstoneFloor(), carpetFloor(), dirtFloor(), cobbleFloor(), woodFloor(), sewerFloor(), grassFloor()].map(grade),
     ceils: [makeTex(), beamCeiling(), nightSky(), daySky(), vaultCeiling()].map(grade),
   };

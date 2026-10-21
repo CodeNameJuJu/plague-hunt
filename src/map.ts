@@ -33,6 +33,8 @@ const W_PEAK = 29; // snow-capped crag — the ridge's tallest cells
 const W_LEAF = 19; // door leaf texture — drawn on the swinging prop
 const W_QUAR = 20; // quarantine quarter — patched, boarded, marked
 const W_LEAF_MARK = 22; // quarter door leaf — daubed with the whitewash X
+const ROOF_SLATE_ID = 40; // blue-grey slate courses — a whole slope's worth
+const ROOF_TILE_ID = 41; // terracotta tiles, same
 
 const F_FLAG = 1;
 const F_DIRT = 3;
@@ -44,6 +46,10 @@ const F_GRASS = 7; // trampled meadow — the camp's park ground
 const C_BEAMS = 1;
 const C_SKY = 2;
 const C_VAULT = 4;
+
+// Interior beam ceilings hang at a storey and a third — loftier than a
+// peasant room, still under the eaves of every house that holds them.
+const CEIL_H = 1.35;
 
 const MAP_W = 90;
 const MAP_H = 90;
@@ -120,6 +126,137 @@ function crossFaces(cx: number, cy: number, w: number, h: number, base: number, 
 function rotOff(x: number, y: number, rot: number, dx: number, dy: number): [number, number] {
   const c = Math.cos(rot), s = Math.sin(rot);
   return [x + dx * c - dy * s, y + dx * s + dy * c];
+}
+
+// ---------------------------------------------------------------------------
+// Tilted quads — real planes, the thing walls can't be. Corners are 3D;
+// u runs along the first edge, v down the second, both scaled so the
+// texture tiles roughly once per cell. Three corners make a triangle.
+function tiltFace(
+  p: [number, number, number][],
+  tex: number,
+  shade: number,
+  az: number | undefined,
+  us: number,
+  vs: number
+): PropFace {
+  const uv: [number, number][] =
+    p.length === 3 ? [[0, 0], [us, 0], [0, vs]] : [[0, 0], [us, 0], [us, vs], [0, vs]];
+  const pts = p.map((c, i): [number, number, number, number, number] => [c[0], c[1], c[2], uv[i][0], uv[i][1]]);
+  return {
+    x0: p[0][0],
+    y0: p[0][1],
+    x1: p[1][0],
+    y1: p[1][1],
+    base: Math.min(...p.map((c) => c[2])),
+    top: Math.max(...p.map((c) => c[2])),
+    tex,
+    shade,
+    az,
+    pts,
+  };
+}
+
+// A pitched roof over a building's outer footprint — two sloped planes
+// meeting at the ridge, gable-end triangles closing the short ends flush
+// with the wall faces. The eaves overhang the facade a quarter cell, so
+// the roofline reads as a real lid sitting on the walls, not a painted
+// band. `axis` is the ridge's direction; gables close the other two ends.
+function roofFaces(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  eave: number,
+  ridgeH: number,
+  axis: "x" | "y",
+  tex: number,
+  gableTex: number
+): PropFace[] {
+  const OV = 0.22;
+  const faces: PropFace[] = [];
+  if (axis === "x") {
+    const ym = (y0 + y1) / 2;
+    const len = x1 - x0;
+    const run = ym - (y0 - OV);
+    faces.push(
+      tiltFace(
+        [[x0, y0 - OV, eave], [x1, y0 - OV, eave], [x1, ym, ridgeH], [x0, ym, ridgeH]],
+        tex, sunShade(-Math.PI / 2), -Math.PI / 2, len, run
+      ),
+      tiltFace(
+        [[x0, ym, ridgeH], [x1, ym, ridgeH], [x1, y1 + OV, eave], [x0, y1 + OV, eave]],
+        tex, sunShade(Math.PI / 2), Math.PI / 2, len, run
+      )
+    );
+    // Gable ends — vertical triangles in the wall plane.
+    faces.push(
+      tiltFace([[x0, y0, eave], [x0, y1, eave], [x0, ym, ridgeH]], gableTex, sunShade(Math.PI), Math.PI, y1 - y0, ridgeH - eave),
+      tiltFace([[x1, y1, eave], [x1, y0, eave], [x1, ym, ridgeH]], gableTex, sunShade(0), 0, y1 - y0, ridgeH - eave)
+    );
+  } else {
+    const xm = (x0 + x1) / 2;
+    const len = y1 - y0;
+    const run = xm - (x0 - OV);
+    faces.push(
+      tiltFace(
+        [[x0 - OV, y0, eave], [xm, y0, ridgeH], [xm, y1, ridgeH], [x0 - OV, y1, eave]],
+        tex, sunShade(Math.PI), Math.PI, len, run
+      ),
+      tiltFace(
+        [[xm, y0, ridgeH], [x1 + OV, y0, eave], [x1 + OV, y1, eave], [xm, y1, ridgeH]],
+        tex, sunShade(0), 0, len, run
+      )
+    );
+    faces.push(
+      tiltFace([[x0, y0, eave], [x1, y0, eave], [xm, y0, ridgeH]], gableTex, sunShade(-Math.PI / 2), -Math.PI / 2, x1 - x0, ridgeH - eave),
+      tiltFace([[x1, y1, eave], [x0, y1, eave], [xm, y1, ridgeH]], gableTex, sunShade(Math.PI / 2), Math.PI / 2, x1 - x0, ridgeH - eave)
+    );
+  }
+  return faces;
+}
+
+// A chimney stack poking through the ridge — a slim brick prism with a cap.
+function chimneyFaces(x: number, y: number, base: number, h: number): PropFace[] {
+  return [
+    ...boxFaces(x, y, 0.22, 0.22, h, W_BRICK, 0, base),
+    topFace(x, y, 0.3, 0.3, base + h + 0.03, W_BRICK),
+  ];
+}
+
+// A canvas awning over a shop door — one sloped sheet off the facade, a
+// hanging valance at the lip, two thin poles carrying it.
+function awningFaces(x: number, y: number, dir: 1 | -1): PropFace[] {
+  const hw = 0.48;
+  const out = 0.4;
+  const zTop = 0.8;
+  const zLip = 0.64;
+  const lip = y + dir * out;
+  const az = dir === 1 ? Math.PI / 2 : -Math.PI / 2;
+  return [
+    tiltFace(
+      [[x - hw, y, zTop], [x + hw, y, zTop], [x + hw, lip, zLip], [x - hw, lip, zLip]],
+      W_CANVAS, sunShade(az), az, hw * 2, out
+    ),
+    { x0: x - hw, y0: lip, x1: x + hw, y1: lip, base: zLip - 0.09, top: zLip, tex: W_CANVAS, shade: 0.5, az },
+    { x0: x - hw, y0: lip, x1: x - hw + 0.03, y1: lip, base: 0, top: zLip, tex: W_WOOD, shade: 0.55, az },
+    { x0: x + hw - 0.03, y0: lip, x1: x + hw, y1: lip, base: 0, top: zLip, tex: W_WOOD, shade: 0.55, az },
+  ];
+}
+
+// A pyramid steeple — four tilted triangles from a square base to the apex.
+function spireFaces(x: number, y: number, base: number, h: number, tex: number): PropFace[] {
+  const hw = 0.42;
+  const apex: [number, number, number] = [x, y, base + h];
+  const c: [number, number][] = [[x - hw, y - hw], [x + hw, y - hw], [x + hw, y + hw], [x - hw, y + hw]];
+  const faces: PropFace[] = [];
+  for (let i = 0; i < 4; i++) {
+    const a = c[i];
+    const b = c[(i + 1) % 4];
+    const mid = Math.atan2((a[1] + b[1]) / 2 - y, (a[0] + b[0]) / 2 - x);
+    faces.push(tiltFace([[a[0], a[1], base], [b[0], b[1], base], apex], tex, sunShade(mid), mid, hw * 2, h));
+  }
+  return faces;
 }
 
 // A bed — low frame, a thin canvas mattress, a bolster and a headboard
@@ -465,19 +602,20 @@ interface BuildingDef {
 }
 
 const BUILDINGS: BuildingDef[] = [
-  // North band — facades on the north street
+  // North band — facades on the north street. Frontages jostle: some
+  // houses share a party wall, some step back off the street into a court.
   { x0: 1, y0: 1, x1: 7, y1: 8, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 4 }, win: [{ side: "E", at: 4 }], name: "bakery", sign: "bakery" },
-  { x0: 9, y0: 1, x1: 14, y1: 8, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 11 } },
+  { x0: 8, y0: 1, x1: 14, y1: 7, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 11 } },
   { x0: 17, y0: 1, x1: 24, y1: 8, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 20 }, win: [{ side: "W", at: 4 }], name: "the inn", sign: "tavern" },
   { x0: 25, y0: 1, x1: 28, y1: 8, wall: W_STONE, floor: F_WOOD, door: { side: "S", at: 26 } },
   { x0: 31, y0: 1, x1: 37, y1: 8, wall: W_TIMBER, floor: F_FLAG, door: { side: "S", at: 34 }, win: [{ side: "W", at: 4 }], name: "apothecary", sign: "apothecary" },
   { x0: 38, y0: 1, x1: 44, y1: 8, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 41 } },
   { x0: 47, y0: 1, x1: 52, y1: 8, wall: W_BRICK, floor: F_FLAG, door: { side: "S", at: 49 } },
-  { x0: 53, y0: 1, x1: 58, y1: 8, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 56 } },
+  { x0: 53, y0: 1, x1: 58, y1: 7, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 56 } },
   // Middle band — between north street and main street
   { x0: 1, y0: 10, x1: 7, y1: 20, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 3 }, win: [{ side: "E", at: 15 }] },
   { x0: 9, y0: 10, x1: 14, y1: 20, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 11 } },
-  { x0: 17, y0: 10, x1: 22, y1: 20, wall: W_STONE, floor: F_FLAG, door: { side: "S", at: 19 }, win: [{ side: "E", at: 14 }] },
+  { x0: 17, y0: 10, x1: 22, y1: 19, wall: W_STONE, floor: F_FLAG, door: { side: "S", at: 19 }, win: [{ side: "E", at: 14 }] },
   { x0: 24, y0: 10, x1: 28, y1: 20, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 26 }, win: [{ side: "E", at: 15 }] },
   { x0: 31, y0: 10, x1: 37, y1: 20, wall: W_TIMBER, floor: F_FLAG, door: { side: "N", at: 34 } },
   { x0: 38, y0: 10, x1: 44, y1: 20, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 41 } },
@@ -485,17 +623,17 @@ const BUILDINGS: BuildingDef[] = [
   { x0: 54, y0: 10, x1: 58, y1: 20, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 56 }, win: [{ side: "W", at: 15 }] },
   // South band — between main street and south street
   { x0: 1, y0: 23, x1: 7, y1: 33, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 4 }, win: [{ side: "E", at: 28 }] },
-  { x0: 9, y0: 23, x1: 14, y1: 33, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 11 } },
+  { x0: 8, y0: 23, x1: 14, y1: 33, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 11 } },
   { x0: 17, y0: 23, x1: 23, y1: 33, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 20 } },
   { x0: 24, y0: 23, x1: 28, y1: 33, wall: W_STONE, floor: F_FLAG, door: { side: "S", at: 26 }, win: [{ side: "E", at: 28 }] },
-  { x0: 35, y0: 23, x1: 38, y1: 33, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 36 } },
+  { x0: 35, y0: 24, x1: 38, y1: 33, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 36 } },
   { x0: 39, y0: 23, x1: 44, y1: 33, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 42 } },
   { x0: 47, y0: 23, x1: 52, y1: 33, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 49 } },
   { x0: 54, y0: 23, x1: 58, y1: 33, wall: W_TIMBER, floor: F_WOOD, door: { side: "S", at: 56 }, win: [{ side: "W", at: 28 }] },
   // Bottom band — below the south street
   { x0: 1, y0: 35, x1: 7, y1: 42, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 4 } },
   { x0: 9, y0: 35, x1: 14, y1: 42, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 11 } },
-  { x0: 17, y0: 35, x1: 23, y1: 42, wall: W_STONE, floor: F_FLAG, door: { side: "N", at: 20 }, win: [{ side: "W", at: 38 }] },
+  { x0: 17, y0: 36, x1: 23, y1: 42, wall: W_STONE, floor: F_FLAG, door: { side: "N", at: 20 }, win: [{ side: "W", at: 38 }] },
   { x0: 24, y0: 35, x1: 28, y1: 42, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 26 } },
   { x0: 31, y0: 35, x1: 37, y1: 42, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 34 } },
   { x0: 38, y0: 35, x1: 44, y1: 42, wall: W_TIMBER, floor: F_WOOD, door: { side: "N", at: 41 }, win: [{ side: "E", at: 38 }] },
@@ -521,7 +659,7 @@ const BUILDINGS: BuildingDef[] = [
   // began, and where the case work happens. The dead strip along the
   // palisade (x62-63) is bare ground — nobody is let near the stakes.
   { x0: 64, y0: 23, x1: 66, y1: 32, wall: W_QUAR, floor: F_WOOD, door: { side: "N", at: 65 } },
-  { x0: 68, y0: 23, x1: 73, y1: 30, wall: W_QUAR, floor: F_WOOD, door: { side: "N", at: 70 }, name: "the shuttered shop", sign: "alchemist" },
+  { x0: 67, y0: 23, x1: 73, y1: 30, wall: W_QUAR, floor: F_WOOD, door: { side: "N", at: 70 }, name: "the shuttered shop", sign: "alchemist" },
   { x0: 75, y0: 23, x1: 80, y1: 32, wall: W_QUAR, floor: F_WOOD, door: { side: "N", at: 77 } },
   { x0: 82, y0: 23, x1: 88, y1: 32, wall: W_QUAR, floor: F_WOOD, door: { side: "N", at: 85 } },
   // Below the qz south street
@@ -547,14 +685,45 @@ const INNER_FOR_WALL: Record<number, number> = {
 };
 const INNER_WALL = 15; // lofts get wainscot
 
-// Height in storeys per material — varied by index so the skyline steps.
-// The quarter was raised in a panic: nothing there climbs like a real house.
-function buildingHeight(wall: number, i: number): number {
-  // Canvas stays under a storey — a marquee is a roof of cloth, not a
-  // house, and there is no upper storey for its walls to rise into.
-  if (wall === W_CANVAS) return 0.62 + (i % 4) * 0.08;
-  const base = wall === W_TIMBER ? 2.3 : wall === W_BRICK ? 2.9 : wall === W_QUAR ? 1.8 : 1.9;
-  return base + (i % 3) * 0.25;
+// Walls stop at the eaves — the roof above them is real geometry. Heights
+// in storeys per material, varied by index so the eaves lines step.
+function eaveHeight(wall: number, i: number): number {
+  // Canvas stays low — a marquee is a tent, its ridge close over your head.
+  if (wall === W_CANVAS) return 0.55 + (i % 4) * 0.05;
+  const base = wall === W_TIMBER ? 1.4 : wall === W_BRICK ? 1.85 : wall === W_QUAR ? 1.15 : 1.5;
+  return base + (i % 4) * 0.15;
+}
+
+// How tall the roof stands over the eaves — steep pitches: medieval
+// roofs ran near forty-five degrees, and from the street the ridge line
+// is what reads as a roof at all.
+function roofRise(wall: number, i: number): number {
+  if (wall === W_CANVAS) return 0.55 + (i % 3) * 0.12;
+  if (wall === W_QUAR) return 0.7 + (i % 3) * 0.15;
+  return 0.9 + (i % 3) * 0.2;
+}
+
+// Which way the ridge runs. Houses put a gable end to the street on a
+// seeded three-in-five — medieval plots were narrow and gabled.
+function ridgeAxis(b: BuildingDef, bi: number): "x" | "y" {
+  const doorNS = b.door.side === "N" || b.door.side === "S";
+  const gableToStreet = (bi * 7 + 3) % 5 < 3;
+  // Gable faces the street when the ridge runs perpendicular to the door.
+  return doorNS === gableToStreet ? "y" : "x";
+}
+
+// Roof skin per material — terracotta or slate; tents roof in their own
+// canvas. The gable ends infill with plain masonry, windows left out.
+function roofTexFor(wall: number, bi: number): number {
+  if (wall === W_CANVAS) return W_CANVAS;
+  if (wall === W_QUAR) return ROOF_SLATE_ID;
+  return (bi & 1) === 0 ? ROOF_TILE_ID : ROOF_SLATE_ID;
+}
+function gableTexFor(wall: number): number {
+  if (wall === W_TIMBER) return 32; // windowless timber upper — plaster bays
+  if (wall === W_QUAR) return 21; // boarded
+  if (wall === W_CANVAS) return W_CANVAS;
+  return wall; // stone and brick gables are just more wall
 }
 
 // ---------------------------------------------------------------------------
@@ -893,6 +1062,7 @@ export function buildMap(): GameMap {
   const wallUp = new Uint8Array(w * h);
   const wallIn = new Uint8Array(w * h);
   const wallH = new Float32Array(w * h).fill(1);
+  const wallCap = new Uint8Array(w * h); // real roofs above — no painted cap
   const openSkin = new Uint8Array(w * h);
   const floorTex = new Uint8Array(w * h);
   const ceilTex = new Uint8Array(w * h);
@@ -971,13 +1141,18 @@ export function buildMap(): GameMap {
     }
   }
 
-  // Buildings — walls with height + facade, interior floor, beams, door,
-  // and any open windows.
+  // Lumps of stone and timber become solid props — quads in world space,
+  // not cells. Building roofs live here too: the walls stop at the eaves
+  // and a pitched lid of tilted quads does the skyline.
+  const props: PropDef[] = [];
+
+  // Buildings — walls rise to the eaves only, facades, interior floor,
+  // beams, door and windows; the roof above them is real geometry.
   for (let bi = 0; bi < BUILDINGS.length; bi++) {
     const b = BUILDINGS[bi];
     const up = UPPER_FOR_WALL[b.wall] ?? 0;
     const inner = INNER_FOR_WALL[b.wall] ?? 0;
-    const bh = buildingHeight(b.wall, bi);
+    const eave = eaveHeight(b.wall, bi);
     for (let y = b.y0; y <= b.y1; y++) {
       for (let x = b.x0; x <= b.x1; x++) {
         const i = y * w + x;
@@ -986,23 +1161,55 @@ export function buildMap(): GameMap {
           walls[i] = b.wall;
           wallUp[i] = up;
           wallIn[i] = inner;
-          wallH[i] = bh;
+          wallH[i] = eave;
           floorTex[i] = 0;
           ceilTex[i] = 0;
         } else {
           floorTex[i] = b.floor;
           ceilTex[i] = C_BEAMS;
-          // The ceiling hangs at the building's own height — a marquee's
-          // canvas roof is low, and sampling it at a full storey would
+          // The ceiling hangs near the building's own height — a marquee's
+          // canvas roof is low, and sampling it at the room height would
           // float a phantom ceiling over the walls from outside.
-          ceilH[i] = Math.min(1, bh);
+          ceilH[i] = Math.min(CEIL_H, eave);
         }
       }
+    }
+    // The lid — two slopes to a ridge, gable ends closing the short sides,
+    // eaves overhanging the facade. Tents keep a dim canvas lid inside so
+    // the ceiling reads as cloth, not open sky under the slopes.
+    const axis = ridgeAxis(b, bi);
+    const ridge = eave + roofRise(b.wall, bi);
+    const rcx = (b.x0 + b.x1 + 1) / 2;
+    const rcy = (b.y0 + b.y1 + 1) / 2;
+    const roof = roofFaces(b.x0, b.y0, b.x1 + 1, b.y1 + 1, eave, ridge, axis, roofTexFor(b.wall, bi), gableTexFor(b.wall));
+    if (b.wall === W_CANVAS) {
+      roof.push({ ...topFace(rcx, rcy, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, eave, W_CANVAS), shade: 0.72 });
+    }
+    props.push({ x: rcx, y: rcy, block: 0, faces: roof });
+    // A chimney stack on the ridge, off toward a gable end — houses had
+    // hearths; tents and the condemned quarter mostly do without.
+    if (b.wall !== W_CANVAS && (bi % 3) !== 2) {
+      const chX = axis === "x" ? b.x0 + 0.8 : rcx;
+      const chY = axis === "x" ? rcy : b.y0 + 0.8;
+      props.push({ x: chX, y: chY, block: 0, faces: chimneyFaces(chX, chY, eave, ridge - eave + 0.4) });
+    }
+    // Shop awnings — a sloped canvas sheet over the door on its street.
+    if (b.sign && b.wall !== W_CANVAS) {
+      const awnY = b.door.side === "S" ? b.y1 + 1 : b.y0;
+      props.push({ x: b.door.at + 0.5, y: awnY, block: 0, faces: awningFaces(b.door.at + 0.5, awnY, b.door.side === "S" ? 1 : -1) });
+    }
+    // The church carries a tower — a taller wall corner and a pyramid
+    // spire over it, the one landmark you can steer by from anywhere.
+    if (b.name === "the church") {
+      const tx = b.x0;
+      const ty = b.y0;
+      wallH[ty * w + tx] = eave + 1.05;
+      props.push({ x: tx + 0.5, y: ty + 0.5, block: 0, faces: spireFaces(tx + 0.5, ty + 0.5, eave + 1.05, 0.85, ROOF_SLATE_ID) });
     }
     // Door on a north or south wall. The cell stays open — a swinging leaf
     // prop hinged at a jamb supplies the door itself (doors.ts via makeDoor).
     const di = (b.door.side === "N" ? b.y0 : b.y1) * w + b.door.at;
-    openCell(di, b, up, inner, bh, doorways);
+    openCell(di, b, up, inner, eave, doorways);
     // Canvas buildings have no leaf — the marquee's flap stands tied open.
     if (b.wall !== W_CANVAS) {
       doors.push(makeDoor(di, b.door.at, b.door.side === "N" ? b.y0 : b.y1, b.door.side === "N" ? 1 : -1));
@@ -1017,7 +1224,7 @@ export function buildMap(): GameMap {
             : win.side === "W"
               ? win.at * w + b.x0
               : win.at * w + b.x1;
-      openCell(wi, b, up, inner, bh, windows);
+      openCell(wi, b, up, inner, eave, windows);
     }
   }
 
@@ -1031,7 +1238,7 @@ export function buildMap(): GameMap {
     openSkin[i] = b.wall;
     floorTex[i] = b.floor;
     ceilTex[i] = C_BEAMS;
-    ceilH[i] = Math.min(1, bh);
+    ceilH[i] = Math.min(CEIL_H, bh);
     set.add(i);
   }
 
@@ -1105,42 +1312,8 @@ export function buildMap(): GameMap {
       y: b.door.side === "S" ? b.y1 + 1.05 : b.y0 - 0.05,
     });
   }
-  // Lumps of stone and timber become solid props — quads in world space,
-  // not cells. The rest stay billboards. Scatter loot is stripped — shops
-  // carry supplies now.
-  const props: PropDef[] = [];
+  // Scatter loot is stripped — shops carry supplies now.
   const lights: LightDef[] = [];
-  // Canvas roofs — a marquee needs a pitched cap: a flat lid at wall
-  // height is geometrically invisible from the ground (you only ever see
-  // its underside), so the roof steps up in gable tiers to a ridge pole
-  // along the long axis, while a flat face at wall height seals the gap
-  // between wall top and ceiling when you're inside.
-  for (let bi = 0; bi < BUILDINGS.length; bi++) {
-    const b = BUILDINGS[bi];
-    if (b.wall !== W_CANVAS) continue;
-    const bh = buildingHeight(b.wall, bi);
-    const rcx = (b.x0 + b.x1 + 1) / 2;
-    const rcy = (b.y0 + b.y1 + 1) / 2;
-    const alongX = b.x1 - b.x0 >= b.y1 - b.y0; // the ridge runs the long way
-    const bwd = b.x1 - b.x0 + 1.02;
-    const bdp = b.y1 - b.y0 + 1.02;
-    const faces: PropFace[] = [
-      // The ceiling lid — only ever seen from below, dim like a tent roof.
-      { ...topFace(rcx, rcy, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, bh, W_CANVAS), shade: 0.72 },
-    ];
-    // Four tiers climbing toward the ridge, shrinking on the cross axis
-    // only so the end profile reads as a pitch rather than a ziggurat.
-    for (let i = 0; i < 4; i++) {
-      const tw = alongX ? bwd : bwd - i * 0.9;
-      const td = alongX ? bdp - i * 0.9 : bdp;
-      faces.push(...boxFaces(rcx, rcy, Math.max(0.2, tw), Math.max(0.2, td), 0.075, W_CANVAS, 0, bh + i * 0.075));
-    }
-    // The ridge pole runs the peak, poking past the gable ends.
-    const rw = alongX ? bwd * 0.55 : 0.07;
-    const rd = alongX ? 0.07 : bdp * 0.55;
-    faces.push(...boxFaces(rcx, rcy, rw, rd, 0.05, W_WOOD, 0, bh + 0.3));
-    props.push({ x: rcx, y: rcy, block: 0, faces });
-  }
   // A wall lantern hangs just off the nearest wall face; where no wall
   // stands within reach the flame becomes a lantern post instead.
   const sconceMount = (x: number, y: number): { x: number; y: number } | null => {
@@ -1212,6 +1385,20 @@ export function buildMap(): GameMap {
     }
   }
 
+  // Each prop's reach — the cull margin needs it now that a roof's faces
+  // spread cells beyond its centre point.
+  for (const p of props) {
+    let r = 0;
+    for (const f of p.faces) {
+      if (f.pts) {
+        for (const q of f.pts) r = Math.max(r, Math.hypot(q[0] - p.x, q[1] - p.y));
+      } else {
+        r = Math.max(r, Math.hypot(f.x0 - p.x, f.y0 - p.y), Math.hypot(f.x1 - p.x, f.y1 - p.y));
+      }
+    }
+    p.radius = r;
+  }
+
   return {
     w,
     h,
@@ -1219,6 +1406,7 @@ export function buildMap(): GameMap {
     wallUp,
     wallIn,
     wallH,
+    wallCap,
     openSkin,
     floorTex,
     ceilTex,
@@ -1375,6 +1563,9 @@ function introShell(w: number, h: number, floor = F_GRASS): GameMap {
     wallUp: new Uint8Array(w * h),
     wallIn: new Uint8Array(w * h),
     wallH: new Float32Array(w * h).fill(1),
+    // The intro scenes have no roof geometry — tall walls still paint
+    // their slate or parapet cap like they always did.
+    wallCap: new Uint8Array(w * h).fill(1),
     openSkin: new Uint8Array(w * h),
     floorTex: new Uint8Array(w * h).fill(floor),
     ceilTex: new Uint8Array(w * h).fill(C_SKY),

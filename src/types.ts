@@ -68,6 +68,11 @@ export interface PropFace {
   dark?: boolean; // interior face — the well's throat stays in shadow
   flat?: boolean; // a horizontal lid — x0..x1/y0..y1 is a rect, top is its height
   rot?: number; // local rotation for flat rects, about their centre
+  // An arbitrary tilted quad — [x,y,z,u,v] corners in order. Set this and
+  // the face is rasterized as a true plane: pitched roofs, tent slopes,
+  // awnings, gable ends (two coincident corners make a triangle). u/v may
+  // exceed 1 — the texture tiles. x0..top are ignored.
+  pts?: [number, number, number, number, number][];
 }
 
 // A free-standing piece of world geometry, unbound by the grid.
@@ -76,6 +81,7 @@ export interface PropDef {
   y: number;
   block: number; // collision radius/thickness, 0 = walk through
   seg?: number[]; // [x0,y0,x1,y1] — collide against a segment (door leaves)
+  radius?: number; // XY reach from (x,y) to the farthest corner — cull margin
   faces: PropFace[];
   // Searchable props carry their interaction metadata onto the geometry.
   search?: string; // loot table id — see clues.ts
@@ -108,6 +114,7 @@ export interface GameMap {
   wallUp: Uint8Array; // upper-storey facade texture id, 0 = no upper band
   wallIn: Uint8Array; // inner-face texture id, 0 = same as outer
   wallH: Float32Array; // wall height in storeys (1 = one floor)
+  wallCap: Uint8Array; // nonzero = the wall's top edge draws a roof-band texture strip
   openSkin: Uint8Array; // on doorway/window cells: the wall id they were cut from
   floorTex: Uint8Array; // floor texture id per cell
   ceilTex: Uint8Array; // ceiling texture id per cell
@@ -128,6 +135,7 @@ export interface GameMap {
 export interface TextureSet {
   walls: Texture[]; // 1 stone, 2 darkBrick, 3 wood, 4 door, 5 timber, 6 barricade, 7+ facades, 19 door leaf, 20+ quarantine, 23 palisade, 24 canvas, 25 tent mouth
   wallsLit: Uint8Array; // facade id -> lit-window variant id, 0 = none
+  wallVariants: Record<number, number[]>; // facade id -> alternates so cells don't stamp the same texture
   floors: Texture[]; // 1 flagstone, 2 carpet, 3 dirt, 4 cobble, 5 wood, 6 sewer, 7 grass
   ceils: Texture[]; // 1 beams, 2 nightSky, 3 daySky
 }

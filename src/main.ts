@@ -355,6 +355,20 @@ const menu = initMenu(display, () => {
   }
 });
 
+// Dev-only frame capture — ?shot=x,y,angle[,pitch] drops straight into the
+// world, no menu, mid-morning light, so a headless shell can screenshot
+// real geometry. Never set in normal play.
+const shotParam = new URLSearchParams(location.search).get("shot");
+if (shotParam) {
+  const [sx, sy, sa, sp] = shotParam.split(",").map(Number);
+  introSeen = true;
+  tday = 0.28;
+  player.x = sx;
+  player.y = sy;
+  player.angle = sa;
+  player.pitch = sp ?? 0;
+}
+
 // The city map — M toggles it. It stays mouse-locked (keyboard only), so the
 // night keeps moving while you read it. Read fast.
 let mapOpen = false;
@@ -656,6 +670,10 @@ function frame(now: number): void {
 
   // The menu's living title backdrop — while the title card is up the camera
   // drifts the city at night; the player's real pose is kept and restored.
+  if (shotParam) {
+    overlay.classList.add("hidden"); // keeps menuUp off — no attract camera
+    overlay.style.display = "none"; // and no fade ghost under a screenshot
+  }
   const menuUp = !overlay.classList.contains("hidden") && !isIntroActive() && !dead;
   if (menuUp) {
     if (!menuPose) {

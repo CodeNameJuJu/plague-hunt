@@ -467,9 +467,10 @@ body {
 
 #prompt {
   position: absolute;
-  bottom: 96px;
+  bottom: 108px;
   left: 0;
   right: 0;
+  z-index: 2;
   text-align: center;
   color: #d8c092;
   font-size: 15px;

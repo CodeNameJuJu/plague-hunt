@@ -12,7 +12,7 @@ import {
 import { computeFlicker, lightAtGrid, LightGrid, splatLights } from "./lighting";
 import { settings } from "./settings";
 import type { LightSample } from "./lighting";
-import type { GameMap, LightDef, PropFace, SpriteRuntime, Texture, TextureSet } from "./types";
+import type { GameMap, LightDef, PropDef, PropFace, SpriteRuntime, Texture, TextureSet } from "./types";
 import type { Player } from "./player";
 
 // Colour of the dark. Everything fades toward this with distance — a deep
@@ -96,6 +96,7 @@ export class Renderer {
   // the gloom reads as hearth embers rather than cold moonlight. Set before
   // each lightAt() call (ambientAt is always invoked for its argument first).
   private ambWarm = 0;
+  private dbgOpen = /[?&]dbg=open/.test(location.search);
 
   // Interiors catch only a fraction of daylight through doors and windows,
   // but they never fall fully dark — embers glow in the hearth.
@@ -158,6 +159,11 @@ export class Renderer {
     const planeX = -dirY * planeLen;
     const planeY = dirX * planeLen;
     const horizon = H / 2 + player.pitch + player.bob;
+
+    // Per-pixel prop depth, cleared here because the wall pass's opening
+    // overlay stamps it — lintels and sills are real surfaces at the
+    // facade's depth, and roofs must lose to them just like to a wall.
+    this.flatDepth.fill(Infinity);
 
     this.castFloorCeiling(map, tex, player, horizon, dirX, dirY, planeX, planeY);
     this.castWalls(map, tex, player, horizon, dirX, dirY, planeX, planeY);
@@ -238,11 +244,13 @@ export class Renderer {
         if (cx >= 0 && cy >= 0 && cx < map.w && cy < map.h) {
           let cell = cy * map.w + cx;
           let texId = isFloor ? map.floorTex[cell] : map.ceilTex[cell];
-          if (!isFloor && texId === 1 && map.ceilH[cell] < 0.99) {
-            // A low interior's ceiling hangs below the full storey — the
-            // default z=1 crossing overshoots it, so resample the landing
-            // at the room's own height. Over a marquee's walls this moves
-            // the hit back outside and the roofline seals shut.
+          if (!isFloor && texId === 1 && Math.abs(map.ceilH[cell] - 1) > 0.01) {
+            // An interior's ceiling rarely sits exactly on the storey
+            // plane — a marquee's canvas hangs below it, a house's beams
+            // above. The default z=1 crossing lands off the real plane,
+            // so resample the landing at the room's own height. Over a
+            // marquee's walls this pulls the hit back inside and the
+            // roofline seals shut.
             const k = (map.ceilH[cell] - EYE_H) / (1 - EYE_H);
             sx = player.x + (fx - player.x) * k;
             sy = player.y + (fy - player.y) * k;
@@ -477,16 +485,29 @@ export class Renderer {
         // A barricaded opening always shows planks at ground level — even on
         // the indoor face — with the facade rising above it. A shut door shows
         // its oak from both sides the same way.
-        const baseId =
+        let baseId =
           wallId === 6 || wallId === 4 ? wallId : indoor && map.wallIn[cellIdx] !== 0 ? map.wallIn[cellIdx] : wallId;
         let upId = indoor ? 0 : map.wallUp[cellIdx];
+        // Facade cells pick from the material's alternates by a cell hash —
+        // neighbouring windows land in different bays, not a stamped row.
+        // The lit-window swap follows, so alternates light up too.
+        if (!indoor) {
+          const bvars = tex.wallVariants[baseId];
+          if (bvars) baseId = bvars[(cellIdx * 7 + side * 3) % bvars.length];
+          const uvars = tex.wallVariants[upId];
+          if (uvars) upId = uvars[(cellIdx * 11 + side * 5) % uvars.length];
+        }
         // Windows light up at night — someone is home.
         if (upId !== 0 && this.daylight < 0.4 && tex.wallsLit[upId] !== 0) {
           upId = tex.wallsLit[upId];
         }
-        // Interior faces are always one storey — the facade height belongs
-        // to the street side only. Low prop walls keep their own height.
-        const effH = indoor ? Math.min(1, cellH) : cellH;
+        // Interior faces rise to the room's own ceiling — the facade
+        // height belongs to the street side. Anything higher would hang
+        // plaster into the air above the beams; anything lower leaves a
+        // band of sky between the wall top and the ceiling plane.
+        const effH = indoor
+          ? Math.min(map.ceilH[ay * map.w + ax] || 1, cellH)
+          : cellH;
         const y0 = Math.max(0, Math.ceil(wallBottom - perpH * effH));
 
         // Light sampled once at the hit point — per-column lighting is enough
@@ -520,9 +541,9 @@ export class Renderer {
           const u = (wallBottom - y) / perpH;
           let texY: number;
           let t: typeof base;
-          if (!indoor && effH > 1.5 && u >= effH - ROOF_BAND) {
+          if (!indoor && map.wallCap[cellIdx] !== 0 && effH > 1.5 && u >= effH - ROOF_BAND) {
             // Roofline — slate or terracotta for houses, stone parapet for
-            // walls. Real buildings only: prop walls (wells, trees) don't cap.
+            // walls. Painted caps only where there's no real roof above.
             const roofId = upId !== 0 ? ((mapX + mapY) & 1 ? ROOF_TILE : ROOF_SLATE) : ROOF_PARAPET;
             t = tex.walls[roofId];
             texY = Math.floor(((effH - u) / ROOF_BAND) * TEX_SIZE);
@@ -531,6 +552,11 @@ export class Renderer {
             texY = Math.floor((1 - u) * TEX_SIZE);
           } else if (upId !== 0) {
             t = upper;
+            texY = Math.floor((1 - (u - Math.floor(u))) * TEX_SIZE);
+          } else if (indoor) {
+            // Interior faces tile per storey — the seam at the storey
+            // line reads as a rail, not a smear.
+            t = base;
             texY = Math.floor((1 - (u - Math.floor(u))) * TEX_SIZE);
           } else {
             t = base;
@@ -584,10 +610,6 @@ export class Renderer {
     if (cellH <= 1) return; // nothing spans a one-storey opening
     const perpH = H / openPerp;
     const bottom = horizon + perpH * EYE_H;
-    const top = bottom - perpH * cellH;
-    const yTop = Math.max(0, Math.ceil(top));
-    const yBot = Math.min(H - 1, Math.floor(bottom));
-    if (yBot < 0 || yTop >= H) return;
 
     const hx = player.x + openPerp * rx;
     const hy = player.y + openPerp * ry;
@@ -597,6 +619,14 @@ export class Renderer {
     const ay = Math.floor(hy - ry * 0.04);
     const indoor =
       ax >= 0 && ay >= 0 && ax < map.w && ay < map.h && map.ceilTex[ay * map.w + ax] === 1;
+    // Indoors the lintel ends at the ceiling — the beams own every row
+    // above it. Outdoors it runs to the eave and meets the roof slope.
+    const effH = indoor ? Math.min(map.ceilH[ay * map.w + ax] || 1, cellH) : cellH;
+
+    const top = bottom - perpH * effH;
+    const yTop = Math.max(0, Math.ceil(top));
+    const yBot = Math.min(H - 1, Math.floor(bottom));
+    if (yBot < 0 || yTop >= H) return;
 
     const texX =
       ((((openSide === 0 ? hy : hx) * TEX_SIZE) | 0) % TEX_SIZE + TEX_SIZE) % TEX_SIZE;
@@ -606,14 +636,22 @@ export class Renderer {
       : map.wallUp[openIdx] !== 0
         ? map.wallUp[openIdx]
         : map.openSkin[openIdx];
-    if (!indoor && this.daylight < 0.4 && tex.wallsLit[lintelId] !== 0) {
-      lintelId = tex.wallsLit[lintelId];
-    }
-    const sillId = indoor
+    let sillId = indoor
       ? innerId
       : map.openSkin[openIdx] !== 0
         ? map.openSkin[openIdx]
         : innerId;
+    // Same cell-hash alternates the solid facade picks — the lintel and
+    // sill belong to the same stamped-out row.
+    if (!indoor) {
+      const lvars = tex.wallVariants[lintelId];
+      if (lvars) lintelId = lvars[(openIdx * 11 + openSide * 5) % lvars.length];
+      const svars = tex.wallVariants[sillId];
+      if (svars) sillId = svars[(openIdx * 7 + openSide * 3) % svars.length];
+      if (this.daylight < 0.4 && tex.wallsLit[lintelId] !== 0) {
+        lintelId = tex.wallsLit[lintelId];
+      }
+    }
     const isWindow = map.windows.has(openIdx);
 
     lightAtGrid(this.grid!, hx, hy, this.ambientAt(hx - rx * 0.04, hy - ry * 0.04), this.ambWarm, this.sample);
@@ -633,7 +671,7 @@ export class Renderer {
       const u = (bottom - y) / perpH;
       let t: Texture;
       let texY: number;
-      if (!indoor && cellH > 1.5 && u >= cellH - ROOF_BAND) {
+      if (!indoor && map.wallCap[openIdx] !== 0 && cellH > 1.5 && u >= cellH - ROOF_BAND) {
         const roofId =
           map.wallUp[openIdx] !== 0
             ? ((openIdx % map.w + Math.floor(openIdx / map.w)) & 1 ? ROOF_TILE : ROOF_SLATE)
@@ -644,8 +682,16 @@ export class Renderer {
         t = lintel;
         texY = Math.floor((1 - (u - Math.floor(u))) * TEX_SIZE);
       } else if (!isWindow) {
+        if (this.dbgOpen) {
+          const o = (y * W + x) * 4;
+          buf[o] = 128; buf[o + 1] = 0; buf[o + 2] = 0; buf[o + 3] = 255;
+        }
         continue; // door: the whole ground storey is open
       } else if (u >= SILL_H) {
+        if (this.dbgOpen) {
+          const o = (y * W + x) * 4;
+          buf[o] = 0; buf[o + 1] = 128; buf[o + 2] = 0; buf[o + 3] = 255;
+        }
         continue; // the window opening itself
       } else {
         t = sill;
@@ -656,10 +702,20 @@ export class Renderer {
       const dth = (BAYER[((y & 3) << 2) | xb] - 0.5) * DITHER_AMP;
       const bp = Math.min(1, Math.max(0, bright + dth));
       const o = (y * W + x) * 4;
+      if (this.dbgOpen) {
+        buf[o] = t === lintel ? 255 : 0;
+        buf[o + 1] = 0;
+        buf[o + 2] = t === lintel ? 255 : 255;
+        buf[o + 3] = 255;
+        continue;
+      }
       buf[o] = lerp(t.data[ti] * trC * bp, FOG_R, fog);
       buf[o + 1] = lerp(t.data[ti + 1] * tgC * bp, FOG_G, fog);
       buf[o + 2] = lerp(t.data[ti + 2] * tbC * bp, FOG_B, fog);
       buf[o + 3] = 255;
+      // The lintel is real facade — prop faces beyond it (the roof slope's
+      // projection can reach below the eave line) must lose these pixels.
+      this.flatDepth[y * W + x] = openPerp;
     }
   }
 
@@ -679,15 +735,17 @@ export class Renderer {
   ): void {
     const buf = this.buf;
     const bandNorm = LIGHT_BANDS - 1;
-    // Cleared before the broad reject — the sprite pass reads flatDepth
-    // every frame, so it must never hold last frame's geometry.
-    this.flatDepth.fill(Infinity);
+    // flatDepth was cleared in render() — the wall pass's opening overlay
+    // already stamped it with lintel/sill depths.
     // Broad reject — props behind the viewer or beyond the fog can't hit.
+    // The margin is the prop's own reach: a building roof's faces spread
+    // far from its centre, so small fixed margins pop them at the edges.
     const near = map.props.filter((p) => {
       const dx = p.x - player.x;
       const dy = p.y - player.y;
-      if (dx * dx + dy * dy > this.fogFar * this.fogFar) return false;
-      return dx * dirX + dy * dirY > -1.5;
+      const reach = (p.radius ??= propReach(p)) + 0.5;
+      if (dx * dx + dy * dy > (this.fogFar + reach) * (this.fogFar + reach)) return false;
+      return dx * dirX + dy * dirY > -reach;
     });
     if (near.length === 0) return;
 
@@ -773,28 +831,190 @@ export class Renderer {
         }
       }
     }
+    // Column-span culling, once per frame: each drawable face's XY extent
+    // projects to a range of screen columns, so the per-column loop below
+    // costs one bounds check per face instead of a segment intersection.
+    const invDet = 1 / (planeX * dirY - dirX * planeY);
+    const culled: {
+      f: PropFace;
+      lo: number;
+      hi: number;
+      chain?: { s: number; z: number }[];
+      pl?: number[][]; // z,u,v as affine planes over world (x,y)
+    }[] = [];
+    for (const p of near) {
+      for (const f of p.faces) {
+        if (f.flat) continue; // lids drew in the first pass
+        const n = f.pts ? f.pts.length : 2;
+        let lo = Infinity;
+        let hi = -Infinity;
+        let straddle = false;
+        for (let i = 0; i < n; i++) {
+          const cx = (f.pts ? f.pts[i][0] : i === 0 ? f.x0 : f.x1) - player.x;
+          const cy = (f.pts ? f.pts[i][1] : i === 0 ? f.y0 : f.y1) - player.y;
+          const txv = invDet * (dirY * cx - dirX * cy);
+          const tyv = invDet * (-planeY * cx + planeX * cy);
+          if (tyv < 0.15) {
+            straddle = true;
+            break;
+          }
+          const sxv = (W / 2) * (1 + txv / tyv);
+          if (sxv < lo) lo = sxv;
+          if (sxv > hi) hi = sxv;
+        }
+        let lo_i = 0;
+        let hi_i = W - 1;
+        if (!straddle && !(hi >= 0 && lo < W && lo <= hi)) continue;
+        if (!straddle) {
+          lo_i = Math.max(0, Math.floor(lo));
+          hi_i = Math.min(W - 1, Math.ceil(hi));
+        }
+        // A tilted face whose corners are all collinear in plan view is a
+        // vertical silhouette — a gable end, not a slope. The ray crosses
+        // it once, like a wall; its top edge follows the corner polyline.
+        let chain: { s: number; z: number }[] | undefined;
+        let pl: number[][] | undefined;
+        if (f.pts) {
+          const p = f.pts;
+          const dxs = p[1][0] - p[0][0];
+          const dys = p[1][1] - p[0][1];
+          const dd = dxs * dxs + dys * dys;
+          if (dd > 1e-8) {
+            let col = true;
+            for (const q of p) {
+              if (Math.abs(dxs * (q[1] - p[0][1]) - dys * (q[0] - p[0][0])) > 1e-6) {
+                col = false;
+                break;
+              }
+            }
+            if (col) {
+              // Upper edge, ordered along the base: corner 0, then the top
+              // chain back to corner 1 — a gable's eave-ridge-eave slope.
+              chain = [];
+              const idx = [0];
+              for (let k = p.length - 1; k >= 1; k--) idx.push(k);
+              for (const k of idx) {
+                const q = p[k];
+                chain.push({
+                  s: ((q[0] - p[0][0]) * dxs + (q[1] - p[0][1]) * dys) / dd,
+                  z: q[2],
+                });
+              }
+              chain.sort((a, b) => a.s - b.s);
+            }
+          }
+          if (!chain) {
+            // The plane's z, u and v are affine over (x,y) — three corners
+            // fit all three coefficients. Then every screen row solves its
+            // own exact depth: no near-plane pops, no warped texture.
+            for (let j = 2; j < p.length && !pl; j++) {
+              const x0 = p[0][0], y0 = p[0][1];
+              const x1 = p[1][0], y1 = p[1][1];
+              const x2 = p[j][0], y2 = p[j][1];
+              const D = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+              if (Math.abs(D) < 1e-6) continue;
+              pl = [];
+              for (const k of [2, 3, 4]) {
+                const v0 = p[0][k], v1 = p[1][k], v2 = p[j][k];
+                const A = ((v1 - v0) * (y2 - y0) - (v2 - v0) * (y1 - y0)) / D;
+                const B = ((x1 - x0) * (v2 - v0) - (x2 - x0) * (v1 - v0)) / D;
+                pl.push([A, B, v0 - A * x0 - B * y0]);
+              }
+            }
+          }
+        }
+        culled.push({ f, lo: lo_i, hi: hi_i, chain, pl });
+      }
+    }
+
+    // The ceiling is a real occluder: a prop pixel behind the ceiling
+    // plane can never be seen — whether it's "behind the wall" or not.
+    // The plane's own depth at this row decides; where the crossing lands
+    // says whether a ceiling exists there at all (beams, vault) or sky.
+    const ceilOccludes = (y: number, rx: number, ry: number, t: number): boolean => {
+      if (y >= horizon - 0.5) return false;
+      let rd = ((1 - EYE_H) * H) / (horizon - y);
+      let cx = Math.floor(player.x + rd * rx);
+      let cy = Math.floor(player.y + rd * ry);
+      if (cx < 0 || cy < 0 || cx >= map.w || cy >= map.h) return false;
+      let cell = cy * map.w + cx;
+      // The real ceiling plane sits at the room's own height — low in a
+      // marquee, above the storey in a house — so resample the crossing
+      // at it, like the ceiling pass does.
+      if (map.ceilTex[cell] === 1 && Math.abs(map.ceilH[cell] - 1) > 0.01) {
+        rd *= (map.ceilH[cell] - EYE_H) / (1 - EYE_H);
+        cx = Math.floor(player.x + rd * rx);
+        cy = Math.floor(player.y + rd * ry);
+        if (cx < 0 || cy < 0 || cx >= map.w || cy >= map.h) return false;
+        cell = cy * map.w + cx;
+      }
+      const ct = map.ceilTex[cell];
+      if (ct !== 1 && ct !== 4) return false; // open sky, not a room
+      return t > rd; // the face is beyond the ceiling surface
+    };
+
     const hits: { t: number; u: number; f: PropFace }[] = [];
+    // Vertical silhouettes — a single crossing, the top edge from the chain.
+    const vsil: { t: number; u: number; f: PropFace; chain: { s: number; z: number }[] }[] = [];
+    // A tilted quad's crossings: the ray enters and exits its XY footprint —
+    // two edge hits, or one when the eye is inside the footprint already.
+    const tilts: { tA: number; tB: number; f: PropFace; pl: number[][] }[] = [];
     for (let x = 0; x < W; x++) {
       const camX = (2 * x) / W - 1;
       const rx = dirX + planeX * camX;
       const ry = dirY + planeY * camX;
       hits.length = 0;
-      for (const p of near) {
-        for (const f of p.faces) {
-          const sx = f.x1 - f.x0;
-          const sy = f.y1 - f.y0;
-          const den = sx * ry - rx * sy;
-          if (den > -1e-9 && den < 1e-9) continue;
-          const ax = f.x0 - player.x;
-          const ay = f.y0 - player.y;
-          const t = (-ax * sy + sx * ay) / den;
-          const u = (rx * ay - ry * ax) / den;
-          if (t < 0.05 || u < 0 || u > 1) continue;
-          hits.push({ t, u, f });
+      vsil.length = 0;
+      tilts.length = 0;
+      for (const c of culled) {
+        if (x < c.lo || x > c.hi) continue;
+        const f = c.f;
+        if (f.pts && c.pl) {
+          const p = f.pts;
+          let tA = Infinity;
+          let tB = -Infinity;
+          for (let i = 0; i < p.length; i++) {
+            const a = p[i];
+            const b = p[(i + 1) % p.length];
+            const ex = b[0] - a[0];
+            const ey = b[1] - a[1];
+            const den = ex * ry - rx * ey;
+            if (den > -1e-9 && den < 1e-9) continue;
+            const ax = a[0] - player.x;
+            const ay = a[1] - player.y;
+            const t = (-ax * ey + ex * ay) / den;
+            const u = (rx * ay - ry * ax) / den;
+            if (t <= 0 || u < 0 || u > 1) continue;
+            if (t < tA) tA = t;
+            if (t > tB) tB = t;
+          }
+          if (tB <= 0.05 || tA === Infinity) continue;
+          // One crossing means the eye is inside the footprint — under an
+          // eave, say — so the near end clamps to just ahead of the eye.
+          tA = Math.max(tA, 0.05);
+          tilts.push({ tA, tB, f, pl: c.pl });
+          continue;
         }
+        const px0 = c.chain ? f.pts![0][0] : f.x0;
+        const py0 = c.chain ? f.pts![0][1] : f.y0;
+        const px1 = c.chain ? f.pts![1][0] : f.x1;
+        const py1 = c.chain ? f.pts![1][1] : f.y1;
+        const sx = px1 - px0;
+        const sy = py1 - py0;
+        const den = sx * ry - rx * sy;
+        if (den > -1e-9 && den < 1e-9) continue;
+        const ax = px0 - player.x;
+        const ay = py0 - player.y;
+        const t = (-ax * sy + sx * ay) / den;
+        const u = (rx * ay - ry * ax) / den;
+        if (t < 0.05 || u < 0 || u > 1) continue;
+        if (c.chain) vsil.push({ t, u, f, chain: c.chain });
+        else hits.push({ t, u, f });
       }
-      if (hits.length === 0) continue;
+      if (hits.length === 0 && vsil.length === 0 && tilts.length === 0) continue;
       hits.sort((a, b) => b.t - a.t); // far to near — nearer faces overpaint
+      vsil.sort((a, b) => b.t - a.t);
+      tilts.sort((a, b) => b.tA - a.tA);
 
       const xb = x & 3;
       for (const hit of hits) {
@@ -839,9 +1059,125 @@ export class Renderer {
           // A nearer lid pixel owns this dot — the row spans differ, so the
           // test has to be per-pixel, not per-column.
           if (hit.t >= this.flatDepth[o >> 2]) continue;
+          // Behind the ceiling plane — ceiling pixels are the room's,
+          // not the face's, whether a wall clipped it or not.
+          if (ceilOccludes(y, rx, ry, hit.t)) continue;
           // The face owns this pixel's depth so sprites clip against the
           // exact prop silhouette, not just the column's nearest face.
           this.flatDepth[o >> 2] = hit.t;
+          buf[o] = lerp(t.data[ti] * trC * bp, FOG_R, fog);
+          buf[o + 1] = lerp(t.data[ti + 1] * tgC * bp, FOG_G, fog);
+          buf[o + 2] = lerp(t.data[ti + 2] * tbC * bp, FOG_B, fog);
+        }
+      }
+
+      // Vertical silhouettes — gable ends. One crossing like a wall face,
+      // but the top edge follows the corner chain: eave up to the ridge
+      // and down, so the column shows a triangle of masonry, not a box.
+      for (const v of vsil) {
+        const f = v.f;
+        const p = f.pts!;
+        const zLo = p[0][2] + (p[1][2] - p[0][2]) * v.u;
+        let zHi = v.chain[v.chain.length - 1].z;
+        for (let i = 0; i + 1 < v.chain.length; i++) {
+          if (v.u <= v.chain[i + 1].s + 1e-9) {
+            const d = v.chain[i + 1].s - v.chain[i].s;
+            zHi = d < 1e-9 ? v.chain[i + 1].z : v.chain[i].z + ((v.chain[i + 1].z - v.chain[i].z) * (v.u - v.chain[i].s)) / d;
+            break;
+          }
+        }
+        const perpH = H / v.t;
+        const floorY = horizon + perpH * EYE_H;
+        const yTop = Math.max(0, Math.ceil(floorY - perpH * zHi));
+        let yBot = Math.min(H - 1, Math.floor(floorY - perpH * zLo));
+        if (v.t >= this.zbuf[x]) yBot = Math.min(yBot, this.colTop[x] - 1);
+        if (yTop > yBot) continue;
+        const texXu = p[0][3] + (p[1][3] - p[0][3]) * v.u;
+        const hx = player.x + v.t * rx;
+        const hy = player.y + v.t * ry;
+        lightAtGrid(this.grid!, hx, hy, this.ambientAt(hx, hy), this.ambWarm, this.sample);
+        let bright = Math.min(1, this.sample.bright) * f.shade;
+        if (f.az !== undefined) {
+          bright *= 1 + this.daylight * 0.7 * Math.cos(f.az - this.sunAz);
+          bright = Math.min(1, Math.max(0, bright));
+        }
+        bright = Math.floor(bright * bandNorm) / bandNorm;
+        const fog = fogFactor(v.t, this.fogNear, this.fogFar);
+        const trC = lerp(COOL.r, WARM.r, this.sample.warm);
+        const tgC = lerp(COOL.g, WARM.g, this.sample.warm);
+        const tbC = lerp(COOL.b, WARM.b, this.sample.warm);
+        const t = tex.walls[f.tex];
+        const texX = Math.floor((((texXu % 1) + 1) % 1) * TEX_SIZE);
+        for (let y = yTop; y <= yBot; y++) {
+          const zRow = (floorY - y) / perpH;
+          // v runs up from the base edge like a new wall storey — the
+          // gable's masonry tiles continuous with the facade below it.
+          const zf = zRow - zLo;
+          const texY = Math.floor((1 - (zf - Math.floor(zf))) * TEX_SIZE) % TEX_SIZE;
+          const ti = (texY * TEX_SIZE + texX) * 3;
+          const o = (y * W + x) * 4;
+          if (v.t >= this.flatDepth[o >> 2]) continue;
+          if (ceilOccludes(y, rx, ry, v.t)) continue;
+          this.flatDepth[o >> 2] = v.t;
+          const dth = (BAYER[((y & 3) << 2) | xb] - 0.5) * DITHER_AMP;
+          const bp = Math.min(1, Math.max(0, bright + dth));
+          buf[o] = lerp(t.data[ti] * trC * bp, FOG_R, fog);
+          buf[o + 1] = lerp(t.data[ti + 1] * tgC * bp, FOG_G, fog);
+          buf[o + 2] = lerp(t.data[ti + 2] * tbC * bp, FOG_B, fog);
+        }
+      }
+
+      // Tilted quads — pitched roofs, tent slopes, awnings, gable ends.
+      // Along the column's ray the plane's height is affine in depth, so
+      // the projected height is a/b+c·t in t: invert it and every row gets
+      // its own exact depth — flatDepth and the texture stay honest.
+      for (const tilt of tilts) {
+        const f = tilt.f;
+        const [pz, pu, pv] = tilt.pl;
+        const za = pz[0] * player.x + pz[1] * player.y + pz[2];
+        const zb = pz[0] * rx + pz[1] * ry;
+        // screen row of the point at t: horizon + (EYE_H - z(t))·H/t
+        const ha = (EYE_H - za) * H;
+        const hb = zb * H;
+        if (Math.abs(ha) < 1e-6) continue; // the plane runs through the eye
+        const yA = horizon + ha / tilt.tA - hb;
+        const yB = horizon + ha / tilt.tB - hb;
+        const yTop = Math.max(0, Math.ceil(Math.min(yA, yB)));
+        let yBot = Math.min(H - 1, Math.floor(Math.max(yA, yB)));
+        if (tilt.tA >= this.zbuf[x]) yBot = Math.min(yBot, this.colTop[x] - 1);
+        if (yTop > yBot) continue;
+        const tMid = (tilt.tA + tilt.tB) * 0.5;
+        const hx = player.x + tMid * rx;
+        const hy = player.y + tMid * ry;
+        lightAtGrid(this.grid!, hx, hy, this.ambientAt(hx, hy), this.ambWarm, this.sample);
+        let bright = Math.min(1, this.sample.bright) * f.shade;
+        if (f.az !== undefined) {
+          bright *= 1 + this.daylight * 0.7 * Math.cos(f.az - this.sunAz);
+          bright = Math.min(1, Math.max(0, bright));
+        }
+        bright = Math.floor(bright * bandNorm) / bandNorm;
+        const trC = lerp(COOL.r, WARM.r, this.sample.warm);
+        const tgC = lerp(COOL.g, WARM.g, this.sample.warm);
+        const tbC = lerp(COOL.b, WARM.b, this.sample.warm);
+        const t = tex.walls[f.tex];
+        for (let y = yTop; y <= yBot; y++) {
+          const trow = ha / (y - horizon + hb);
+          if (trow < tilt.tA || trow > tilt.tB) continue;
+          const o = (y * W + x) * 4;
+          if (trow >= this.flatDepth[o >> 2]) continue;
+          // A nearer wall owns the rows below its top edge — and above
+          // it, the room's ceiling owns the beams rows.
+          if (trow >= this.zbuf[x] && y >= this.colTop[x]) continue;
+          if (ceilOccludes(y, rx, ry, trow)) continue;
+          this.flatDepth[o >> 2] = trow;
+          const fx = player.x + trow * rx;
+          const fy = player.y + trow * ry;
+          const texX = Math.floor(((pu[0] * fx + pu[1] * fy + pu[2]) % 1 + 1) % 1 * TEX_SIZE);
+          const texY = Math.floor(((pv[0] * fx + pv[1] * fy + pv[2]) % 1 + 1) % 1 * TEX_SIZE);
+          const ti = (texY * TEX_SIZE + texX) * 3;
+          const fog = fogFactor(trow, this.fogNear, this.fogFar);
+          const dth = (BAYER[((y & 3) << 2) | xb] - 0.5) * DITHER_AMP;
+          const bp = Math.min(1, Math.max(0, bright + dth));
           buf[o] = lerp(t.data[ti] * trC * bp, FOG_R, fog);
           buf[o + 1] = lerp(t.data[ti + 1] * tgC * bp, FOG_G, fog);
           buf[o + 2] = lerp(t.data[ti + 2] * tbC * bp, FOG_B, fog);
@@ -1005,6 +1341,20 @@ function fogFactor(dist: number, near: number, far: number): number {
   const f = (dist - near) / (far - near);
   const c = f < 0 ? 0 : f > 1 ? 1 : f;
   return c * c * (3 - 2 * c);
+}
+
+// How far a prop's geometry reaches from its anchor — the cull margin.
+// Computed lazily for props the map builder didn't pre-measure.
+function propReach(p: PropDef): number {
+  let r = 0;
+  for (const f of p.faces) {
+    if (f.pts) {
+      for (const q of f.pts) r = Math.max(r, Math.hypot(q[0] - p.x, q[1] - p.y));
+    } else {
+      r = Math.max(r, Math.hypot(f.x0 - p.x, f.y0 - p.y), Math.hypot(f.x1 - p.x, f.y1 - p.y));
+    }
+  }
+  return r;
 }
 
 // Band-quantised brightness + warm/cool tint, precomputed per surface.
