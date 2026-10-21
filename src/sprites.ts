@@ -535,31 +535,6 @@ function anetteFrame(p: number): SpriteTex {
   return figurePix(ANETTE, "stand", p);
 }
 
-// A shrouded corpse laid out for autopsy on a stone slab.
-function corpseSprite(): SpriteTex {
-  const s = makeSprite();
-  // The trestle board — dark wood on two legs.
-  rect(s, 10, 44, 54, 49, 68, 50, 34);
-  rect(s, 10, 44, 54, 45.5, 88, 66, 46);
-  rect(s, 14, 49, 17, 58, 52, 40, 28);
-  rect(s, 47, 49, 50, 58, 52, 40, 28);
-  // The body — shroud over the legs, chest bare.
-  rect(s, 21, 37, 48, 43.5, 168, 160, 148);
-  ellipse(s, 37, 39.5, 11, 4.5, 168, 160, 148);
-  line(s, 28, 37, 46, 37, 1, 134, 126, 116); // sheet fold
-  // Exposed head and ribs — pale, waxy.
-  ellipse(s, 17, 40, 4.5, 4, 186, 176, 160);
-  px(s, 16, 39, 40, 34, 30);
-  px(s, 19, 39, 40, 34, 30); // closed eyes
-  rect(s, 22, 37.5, 30, 42, 184, 174, 158);
-  for (let x = 23; x < 30; x += 2) px(s, x, 39.5, 156, 146, 134); // the ribs
-  line(s, 30, 38.5, 38, 43, 2, 180, 170, 156); // arm across the board
-  ellipse(s, 49, 41, 3, 2.5, 158, 146, 130); // a foot escaping the sheet
-  // Toe tag.
-  rect(s, 50, 37, 53, 40, 192, 182, 152);
-  px(s, 51, 38, 70, 58, 44);
-  return finish(s);
-}
 // A heap of the dead — what the alchemist dumps below.
 function corpsepileSprite(): SpriteTex {
   const s = makeSprite();
@@ -790,7 +765,6 @@ export function buildSpriteKinds(): Record<string, SpriteKind> {
     letter: { frames: [letterSprite()], scale: 0.3, block: 0, animFps: 0 },
     grate: { frames: [grateSprite()], scale: 0.4, block: 0, animFps: 0 },
     // bed, homebed, table and desk are props now — real furniture, not billboards
-    corpse: { frames: [corpseSprite()], scale: 0.5, block: 0.26, animFps: 0 },
     corpsepile: { frames: [corpsepileSprite()], scale: 0.55, block: 0.32, animFps: 0 },
     alembic: { frames: [alembicSprite()], scale: 0.55, block: 0.18, animFps: 0 },
     marks: { frames: [marksSprite()], scale: 0.32, block: 0, animFps: 0 },

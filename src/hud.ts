@@ -156,6 +156,7 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
   const panel = document.getElementById("inventory")!;
   const compass = document.getElementById("compass") as HTMLCanvasElement;
   const cctx = compass.getContext("2d")!;
+  let lastDlg: string | null = null;
 
   const counts: Record<string, HTMLElement> = {};
   const slots: Record<string, HTMLElement> = {};
@@ -361,6 +362,14 @@ export function initHud(icons: Record<string, SpriteTex>, handlers: PanelHandler
       questEl.textContent = text;
     },
     setDialog(speaker, text, more = true, topics) {
+      // Called every frame — only touch the DOM when the page actually changes.
+      const sig = !speaker
+        ? null
+        : `${speaker}|${text ?? ""}|${more}|${keyName(binds.interact)}|${
+            topics ? topics.map((t) => `${t.key}${t.locked ? "!" : ""}${t.label}`).join(",") : ""
+          }`;
+      if (sig === lastDlg) return;
+      lastDlg = sig;
       if (!speaker) {
         dialog.classList.remove("open");
         return;

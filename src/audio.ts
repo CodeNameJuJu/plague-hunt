@@ -23,6 +23,7 @@ export interface GameAudio {
   bell(): void;
   tick(): void; // a casebook page turning
   coin(): void;
+  sting(): void; // death — the floor coming up to meet you
 }
 
 function rng(seed: number): () => number {
@@ -228,6 +229,12 @@ export function initAudio(): GameAudio {
     coin() {
       plip(3400, 3300, 0.05, 0.05);
       plip(4300, 4100, 0.05, 0.04, 0.035);
+    },
+
+    sting() {
+      if (!ctx) return;
+      plip(140, 38, 0.5, 0.22);
+      burst(0.3, "lowpass", 110, 0.18);
     },
   };
 }

@@ -367,9 +367,10 @@ mapEl.appendChild(citymap.canvas);
 // Toggled in a real keydown so closing can re-acquire pointer lock.
 let invOpen = false;
 window.addEventListener("keydown", (e) => {
-  // A shop counter or the autopsy slab already owns the mouse — toggling the
-  // pack now would steal the pointer back and leave their panel unclosable.
-  if (e.code !== binds.pack || dead || shop.isOpen() || autopsy.isOpen()) return;
+  // A shop counter, the autopsy slab or a conversation already owns the
+  // mouse — toggling the pack now would stack panels or steal the pointer.
+  if (e.code !== binds.pack || dead || shop.isOpen() || autopsy.isOpen() || quest.state.dialogOpen) return;
+  if (!isLocked() && !invOpen) return; // the menu owns the key, not the pack
   e.preventDefault();
   invOpen = !invOpen;
   hud.togglePanel(invOpen, inv);
@@ -395,6 +396,15 @@ initInput(display, (locked) => {
     tday = 0.05;
     day += 1;
     newDay();
+    log(
+      quest.state,
+      day,
+      "the watch found you slumped in the gutter and dragged you back to the gate. luck, this once, did the physician's work."
+    );
+    say(quest.state, "the gutter", [
+      "Cold stone under your cheek — the watch dragged you to the gate before the rats could have their say.",
+      "You rise, aching, the pack still on your back. The quarter goes on as if nothing happened. Your work isn't done.",
+    ]);
   }
   if (!locked) {
     journal.close();
@@ -533,7 +543,7 @@ function frame(now: number): void {
       const obscured = journal.isOpen() || mapOpen;
       if (dlg.lineIdx < dlg.lines.length) {
         hud.setDialog(dlg.speaker, dlg.lines[dlg.lineIdx], true);
-        if (!obscured && consumePress(binds.interact)) {
+        if (consumePress(binds.interact) && !obscured) {
           dlg.lineIdx++;
           audio.tick();
         }
@@ -551,7 +561,7 @@ function frame(now: number): void {
         );
         let pick = -1;
         for (let i = 0; i < 9; i++) {
-          if (!obscured && consumePress(`Digit${i + 1}`)) pick = i;
+          if (consumePress(`Digit${i + 1}`) && !obscured) pick = i;
         }
         if (pick >= 0) {
           const t = dlg.topics[pick];
@@ -559,10 +569,10 @@ function frame(now: number): void {
             t.run(dlg, inv, day);
             audio.tick();
           }
-        } else if (!obscured && consumePress(binds.interact)) {
+        } else if (consumePress(binds.interact) && !obscured) {
           endDialog(dlg);
         }
-      } else if (!obscured && consumePress(binds.interact)) {
+      } else if (consumePress(binds.interact) && !obscured) {
         endDialog(dlg);
       }
       if (!dlg.dialogOpen) {
@@ -607,6 +617,7 @@ function frame(now: number): void {
 
     if (needs.health <= 0) {
       dead = true;
+      audio.sting();
       document.exitPointerLock();
     }
     hud.setDamage(wightTouch);
@@ -616,7 +627,8 @@ function frame(now: number): void {
     hud.setQuest(questText(quest.state));
     hud.setCompass(player.x, player.y, player.angle, map.landmarks);
   } else {
-    // don't let presses queue up while paused
+    // don't let presses queue up while paused — topic digits included, or a
+    // stray keystroke in a menu picks the next interrogation blind
     consumePress(binds.interact);
     consumePress(binds.map);
     consumePress(binds.journal);
@@ -624,6 +636,7 @@ function frame(now: number): void {
     consumePress(binds.use2);
     consumePress(binds.use3);
     consumePress(binds.lantern);
+    for (let i = 1; i <= 9; i++) consumePress(`Digit${i}`);
     if (mapOpen) {
       mapOpen = false;
       mapEl.classList.remove("open");

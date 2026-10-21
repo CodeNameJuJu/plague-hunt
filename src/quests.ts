@@ -241,6 +241,15 @@ export function say(q: QuestState, speaker: string, lines: string[]): void {
   open(q, speaker, lines);
 }
 
+// A menu page — no spoken lines, and it mustn't absorb the casebook's
+// pending deductions: those land on real conversations, not door handles.
+export function openMenu(q: QuestState, speaker: string): void {
+  q.dialogOpen = true;
+  q.speaker = speaker;
+  q.lines = [];
+  q.lineIdx = 0;
+}
+
 // Conversation over — clears both the lines and any interrogation menu.
 export function endDialog(q: QuestState): void {
   q.dialogOpen = false;
@@ -445,6 +454,12 @@ function talkPatient(q: QuestState, npc: QuestNPC, inv: Inventory, day: number):
     if (q.cured.size >= 3) {
       q.stage = "done";
       log(q, day, "gave the cure to all three patients. by morning the fever broke in every one of them. the quarter breathes again.");
+      // The closing beat — the third dose flows straight into the end.
+      q.lines.push(
+        "Word will spread by morning — three dead men standing at their doors, blinking in the sun.",
+        "The provost will claim the credit. Sister Marguerite will pray for the alchemist. The quarter goes on.",
+        "You close the casebook. The pestilence stays — but the poisoning is done."
+      );
     }
     return;
   }

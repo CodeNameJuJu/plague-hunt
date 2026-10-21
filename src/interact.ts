@@ -4,7 +4,7 @@ import type { Inventory } from "./inventory";
 import { drinkWell } from "./needs";
 import type { Needs } from "./needs";
 import type { Player } from "./player";
-import { endDialog, log, readLetter, say, talk } from "./quests";
+import { endDialog, log, openMenu, readLetter, say, talk } from "./quests";
 import type { QuestNPC, QuestState } from "./quests";
 import { grantClue, CLUES, SEARCHES } from "./clues";
 import type { GameMap, PropDef, SpriteRuntime } from "./types";
@@ -339,7 +339,7 @@ export function findInteraction(
         return {
           prompt: "the door — shut fast",
           apply: () => {
-            say(quest.state, "the door", []);
+            openMenu(quest.state, "the door");
             quest.state.topics = [
               {
                 label: "open the door",
