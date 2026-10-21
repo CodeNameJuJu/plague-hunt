@@ -408,7 +408,7 @@ let last = performance.now();
 let time = 0;
 // Footfalls and bell tolls — tracked against the clock and the head bob.
 let lastStep = 0;
-let lastPhase = "day";
+let lastPhase = "night"; // the intro ends at dawn — let the first morning toll
 // Strafe lean — the view shears a touch when sidestepping, like Quake's roll.
 let viewRoll = 0;
 // The player's real pose while the menu's attract camera is borrowed.
