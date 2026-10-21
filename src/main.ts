@@ -47,11 +47,12 @@ import {
   log,
   QUEST_NPCS,
   questText,
+  say,
   topicAvailable,
 } from "./quests";
 import { grantClue } from "./clues";
 import { Renderer } from "./renderer";
-import { buildLantern, buildSpriteKinds, buildSpriteModels, texCanvas, villagerVariants } from "./sprites";
+import { buildLantern, buildSpriteKinds, texCanvas, villagerVariants } from "./sprites";
 import { initMenu } from "./menu";
 import {
   attractShamblerSprites,
@@ -70,7 +71,6 @@ import type { SpriteRuntime } from "./types";
 const map = buildMap();
 const introMaps = buildIntroMaps(); // the road scenes — intro shots only
 const textures = buildTextures();
-buildSpriteModels(textures); // people as voxel figures — faces join the wall table
 const spriteKinds = buildSpriteKinds();
 const villagerFrames = villagerVariants();
 const sprites: SpriteRuntime[] = map.sprites.map((s) => {
@@ -80,7 +80,6 @@ const sprites: SpriteRuntime[] = map.sprites.map((s) => {
     kind: s.kind,
     x: s.x,
     y: s.y,
-    pickup: s.pickup,
     letter: s.letter,
     stairLink: s.stairLink,
     examine: s.examine,
@@ -113,8 +112,6 @@ for (const n of QUEST_NPCS) {
   const kind = spriteKinds[n.sprite];
   sprites.push({ kind: n.sprite, x: n.x, y: n.y, ...kind });
 }
-// PROTOTYPE: a second cordon guard in the native-pixel style, posted a step
-// west of the provost for a side-by-side comparison. Scenery only — no talk.
 const quest = { npcs: QUEST_NPCS, state: initQuest() };
 const villagers = makeVillagers(map);
 // The watch and the market — patrols beat their rounds day and night;
@@ -136,7 +133,6 @@ const introSceneSprites: Record<string, SpriteRuntime[]> = {};
     scale: vScale,
     block: 0,
     animFps: 0,
-    model: `villager${v % 8}`,
   });
   introSceneSprites.farmland = [
     folk(5, 0, 7.8, 8.3),   // a fieldhand in the field gate, hoeing by the road
@@ -259,6 +255,21 @@ const autopsy = initAutopsy(() => {
       ? "opened the body on the pesthouse slab — black tongue, buboes, plague as expected. but the blood ran thin and bright, and the nails were stained grey."
       : "a second body on the slab — a metallic sheen on the tongue, no buboes, skin smelling of the still. this was not the pestilence. someone fed him a formula."
   );
+  // Speak the record aloud — this is also where the casebook's pending
+  // deduction lands, on the finding that sealed it.
+  say(
+    q,
+    "the autopsy",
+    q.autopsies === 1
+      ? [
+          "Plague, as expected — the black tongue, the buboes hard as plumstones.",
+          "But the blood ran thin and bright, and the nails are stained grey. Plague does not stain nails. You write it all down.",
+        ]
+      : [
+          "No buboes — a metallic sheen on the tongue, the skin smelling of the still.",
+          "This man did not die of the pestilence. He died of something fed to him. You write it all down.",
+        ]
+  );
 });
 
 // What the world interactions can trigger.
@@ -288,11 +299,20 @@ const hooks = {
     needs.thirst = Math.max(0, needs.thirst - 10);
     needs.fatigue = 100;
   },
+  // A few hours' sleep, day intact — the shadow beat's relief valve. Wake at
+  // dusk, in time to be outside before the grey man walks.
+  nap() {
+    tday = 0.47;
+    needs.hunger = Math.max(0, needs.hunger - 5);
+    needs.thirst = Math.max(0, needs.thirst - 5);
+    needs.fatigue = 100;
+  },
 };
 
 // --- menu -------------------------------------------------------------------
 
 const overlay = document.getElementById("overlay")!;
+const hudEl = document.getElementById("hud")!;
 if (settings.brightness !== 1) display.style.filter = `brightness(${settings.brightness})`;
 
 // The opening sequence plays once per session — "descend" runs it, everything
@@ -312,13 +332,17 @@ const menu = initMenu(display, () => {
     // big, then the pointer locks when it ends.
     if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
     tday = 0.86; // the dead hours before dawn
-    beginIntro(() => {
+    beginIntro((skipped) => {
       tday = START_TDAY; // dawn — your first day begins
       player.x = map.spawnX;
       player.y = map.spawnY;
       player.angle = map.spawnAngle;
       player.pitch = 0;
-      lockIn();
+      // A skip lands inside the gesture, so the pointer can lock straight
+      // away; an intro watched to the end has no gesture left — drop back
+      // to the title, where the next click locks in.
+      if (skipped) lockIn();
+      else overlay.classList.remove("hidden");
     });
   } else {
     lockIn();
@@ -337,7 +361,9 @@ mapEl.appendChild(citymap.canvas);
 // Toggled in a real keydown so closing can re-acquire pointer lock.
 let invOpen = false;
 window.addEventListener("keydown", (e) => {
-  if (e.code !== binds.pack || dead) return;
+  // A shop counter or the autopsy slab already owns the mouse — toggling the
+  // pack now would steal the pointer back and leave their panel unclosable.
+  if (e.code !== binds.pack || dead || shop.isOpen() || autopsy.isOpen()) return;
   e.preventDefault();
   invOpen = !invOpen;
   hud.togglePanel(invOpen, inv);
@@ -478,9 +504,12 @@ function frame(now: number): void {
     const dlg = quest.state;
     if (dlg.dialogOpen) {
       hud.setPrompt(null);
+      // The casebook and the city map sit over the conversation — while one
+      // is up the talk waits, so blind keypresses don't pick hidden topics.
+      const obscured = journal.isOpen() || mapOpen;
       if (dlg.lineIdx < dlg.lines.length) {
         hud.setDialog(dlg.speaker, dlg.lines[dlg.lineIdx], true);
-        if (consumePress(binds.interact)) dlg.lineIdx++;
+        if (!obscured && consumePress(binds.interact)) dlg.lineIdx++;
       } else if (dlg.topics && dlg.topics.length > 0) {
         hud.setDialog(
           dlg.speaker,
@@ -495,15 +524,15 @@ function frame(now: number): void {
         );
         let pick = -1;
         for (let i = 0; i < 9; i++) {
-          if (consumePress(`Digit${i + 1}`)) pick = i;
+          if (!obscured && consumePress(`Digit${i + 1}`)) pick = i;
         }
         if (pick >= 0) {
           const t = dlg.topics[pick];
           if (t && topicAvailable(dlg, t)) t.run(dlg, inv, day);
-        } else if (consumePress(binds.interact)) {
+        } else if (!obscured && consumePress(binds.interact)) {
           endDialog(dlg);
         }
-      } else if (consumePress(binds.interact)) {
+      } else if (!obscured && consumePress(binds.interact)) {
         endDialog(dlg);
       }
       if (!dlg.dialogOpen) {
@@ -572,8 +601,11 @@ function frame(now: number): void {
   }
 
   // The intro pans the camera over the night city; the villagers take
-  // themselves home while it plays.
-  if (isIntroActive()) {
+  // themselves home while it plays. The HUD hides — a reticle and a hotbar
+  // don't belong in the cinema.
+  const introPlaying = isIntroActive();
+  hudEl.style.display = introPlaying ? "none" : "";
+  if (introPlaying) {
     updateIntro(dt, player);
     updateVillagers(villagers, dt, 0, tday, map, player);
     updatePatrols(patrols, dt);
@@ -638,7 +670,6 @@ function frame(now: number): void {
         scale: spriteKinds.shambler.scale,
         block: 0,
         animFps: 2.4,
-        model: "shambler",
       });
     }
   }

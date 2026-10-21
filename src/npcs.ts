@@ -226,8 +226,6 @@ export function villagerSprites(
       scale: scale * v.scale,
       block: 0,
       animFps: v.wait > 0 ? 0 : 2.2 + v.speed, // faster walkers swing faster; a dawdler stands still
-      model: `villager${vi}`,
-      angle: Math.atan2(v.ty - v.y, v.tx - v.x),
     };
   });
 }
@@ -335,8 +333,6 @@ export function patrolSprites(
     scale,
     block: 0,
     animFps: 2.2 + PATROL_SPEED,
-    model: "patrol",
-    angle: p.ang,
   }));
 }
 
@@ -397,7 +393,9 @@ export function updateMarket(state: MarketState, daylight: number): void {
     const p = open ? v.stall : v.home;
     v.npc.x = p.x;
     v.npc.y = p.y;
-    // Packed up and gone — the sprite leaves the street entirely.
+    // Packed up and gone — the sprite leaves the street entirely, and the
+    // vendor can't be hailed at home: no stall, no trade after dark.
     v.sprite.taken = !open;
+    v.npc.hidden = !open;
   }
 }

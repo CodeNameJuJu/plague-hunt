@@ -45,9 +45,9 @@ export interface PanelHandlers {
 
 // Hotbar slots: consumables with hotkeys, planks as a count, and the purse.
 const SLOTS: { id: string; key: string }[] = [
-  { id: "bread", key: "1" },
-  { id: "skin", key: "2" },
-  { id: "bandage", key: "3" },
+  { id: "bread", key: keyName(binds.use1) },
+  { id: "skin", key: keyName(binds.use2) },
+  { id: "bandage", key: keyName(binds.use3) },
   { id: "planks", key: "" },
   { id: "sous", key: "" },
 ];

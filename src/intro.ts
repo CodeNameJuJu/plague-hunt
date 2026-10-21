@@ -95,7 +95,7 @@ let idx = 0;
 let t = 0;
 let active = false;
 let shotAngle = 0;
-let onDone: () => void = () => {};
+let onDone: (skipped: boolean) => void = () => {};
 
 function enter(): void {
   const s = SHOTS[idx];
@@ -106,13 +106,13 @@ function enter(): void {
   if (veil) veil.style.opacity = s.title || s.veil ? "1" : "0";
 }
 
-function finish(): void {
+function finish(skipped = false): void {
   if (!active) return;
   active = false;
   window.removeEventListener("keydown", skip, true);
   window.removeEventListener("mousedown", skip, true);
   zoms.length = 0;
-  onDone();
+  onDone(skipped);
   // Let the black veil breathe a moment, then drop the overlay entirely.
   if (veil) veil.style.opacity = "0";
   if (titleEl) titleEl.classList.remove("show");
@@ -120,7 +120,7 @@ function finish(): void {
 }
 
 function skip(): void {
-  finish();
+  finish(true);
 }
 
 export function isIntroActive(): boolean {
@@ -142,7 +142,7 @@ export function introLight(): { day: number; sunT: number } | null {
   return { day: s.day ?? 0.05, sunT: s.sunT ?? 0.9 };
 }
 
-export function beginIntro(done: () => void): void {
+export function beginIntro(done: (skipped: boolean) => void): void {
   el = document.getElementById("intro")!;
   card = el.querySelector(".card")!;
   veil = el.querySelector(".veil")!;
@@ -220,7 +220,6 @@ export function introShamblerSprites(frames: SpriteRuntime["frames"], scale: num
     scale,
     block: 0,
     animFps: 2.4,
-    model: "shambler",
   }));
 }
 
@@ -281,6 +280,5 @@ export function attractShamblerSprites(frames: SpriteRuntime["frames"], scale: n
     scale,
     block: 0,
     animFps: 2.4,
-    model: "shambler",
   }));
 }

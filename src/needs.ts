@@ -41,12 +41,12 @@ export function updateNeeds(n: Needs, dt: number, running: boolean): void {
   }
 }
 
-export function eat(n: Needs): void {
-  n.hunger = Math.min(100, n.hunger + BREAD_RESTORE);
+export function eat(n: Needs, amount = BREAD_RESTORE): void {
+  n.hunger = Math.min(100, n.hunger + amount);
 }
 
-export function drinkSkin(n: Needs): void {
-  n.thirst = Math.min(100, n.thirst + SKIN_RESTORE);
+export function drinkSkin(n: Needs, amount = SKIN_RESTORE): void {
+  n.thirst = Math.min(100, n.thirst + amount);
 }
 
 export function drinkWell(n: Needs): void {

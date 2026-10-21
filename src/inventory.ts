@@ -35,8 +35,8 @@ export function carried(inv: Inventory): { def: ItemDef; n: number }[] {
 export function useItem(inv: Inventory, n: Needs, id: ItemId): boolean {
   if (count(inv, id) <= 0) return false;
   const def = ITEMS[id];
-  if (def.type === "food") eat(n);
-  else if (def.type === "drink") drinkSkin(n);
+  if (def.type === "food") eat(n, def.restore);
+  else if (def.type === "drink") drinkSkin(n, def.restore);
   else if (def.type === "heal") heal(n, def.restore ?? 0);
   else return false;
   inv.items[id] = count(inv, id) - 1;

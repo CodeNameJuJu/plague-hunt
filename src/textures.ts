@@ -1589,6 +1589,5 @@ export function buildTextures(): TextureSet {
     wallsLit,
     floors: [makeTex(), flagstoneFloor(), carpetFloor(), dirtFloor(), cobbleFloor(), woodFloor(), sewerFloor(), grassFloor()].map(grade),
     ceils: [makeTex(), beamCeiling(), nightSky(), daySky(), vaultCeiling()].map(grade),
-    models: {}, // filled by buildSpriteModels — the wall table isn't done yet
   };
 }

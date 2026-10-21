@@ -1,7 +1,6 @@
 import { BARRICADE_COST, BARRICADE_WALL_ID, INTERACT_RANGE } from "./config";
 import { addPickup, count } from "./inventory";
 import type { Inventory } from "./inventory";
-import { ITEMS } from "./items";
 import { drinkWell } from "./needs";
 import type { Needs } from "./needs";
 import type { Player } from "./player";
@@ -27,6 +26,7 @@ export interface InteractHooks {
   openAutopsy(): void;
   openJournal(): void;
   sleep(): void;
+  nap(): void;
 }
 
 // Where each story beat sits in order — the sewer grate only opens once the
@@ -63,6 +63,7 @@ export function findInteraction(
 
   // A quest NPC within reach, roughly ahead — talk to them.
   for (const n of quest.npcs) {
+    if (n.hidden) continue;
     const dx = n.x - player.x;
     const dy = n.y - player.y;
     const d = Math.hypot(dx, dy);
@@ -81,13 +82,11 @@ export function findInteraction(
   for (const s of sprites) {
     if (s.taken) continue;
     const isUseful =
-      s.pickup !== undefined ||
       s.letter !== undefined ||
       s.search !== undefined ||
       s.clue !== undefined ||
       s.kind === "stairs" ||
       s.kind === "grate" ||
-      s.kind === "corpse" ||
       s.kind === "alembic";
     if (!isUseful) continue;
     const dx = s.x - player.x;
@@ -123,7 +122,10 @@ export function findInteraction(
       return { prompt: "examine the body", apply: () => hooks.openAutopsy() };
     }
     if (p.use === "homebed") {
+      // While the grey man walks, the night itself is for watching the
+      // streets — but the day before is for napping off the exhaustion.
       if (quest.state.stage === "shadow") {
+        if (tday < 0.45) return { prompt: "nap until dusk", apply: () => hooks.nap() };
         return { prompt: "sleep can wait — tonight you watch the streets", apply: () => {} };
       }
       if (tday < 0.45) return { prompt: "too early to sleep — the day's work isn't done", apply: () => {} };
@@ -215,9 +217,6 @@ export function findInteraction(
         },
       };
     }
-    if (s.kind === "corpse") {
-      return { prompt: "examine the body", apply: () => hooks.openAutopsy() };
-    }
     if (s.kind === "alembic") {
       return {
         prompt: "examine the still",
@@ -269,19 +268,6 @@ export function findInteraction(
         apply: () => readLetter(quest.state, letter, day),
       };
     }
-    const kind = s.pickup!;
-    // Timber only matters once the dead walk — before that a physician has
-    // no use for a plank, and the game shouldn't pretend he does.
-    if (kind === "planks" && !outbreak) {
-      return { prompt: "splintered boards — of no use to a physician", apply: () => {} };
-    }
-    return {
-      prompt: `take ${ITEMS[kind].name}`,
-      apply: () => {
-        s.taken = true;
-        addPickup(inv, kind);
-      },
-    };
   }
 
   // The well is solid geometry — drink at its landmark. Checked after the

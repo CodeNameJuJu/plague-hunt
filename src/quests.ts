@@ -35,6 +35,7 @@ export interface QuestNPC {
   sprite: string;
   x: number;
   y: number;
+  hidden?: boolean; // packed up and gone — the market vendors after dark
 }
 
 export interface JournalEntry {

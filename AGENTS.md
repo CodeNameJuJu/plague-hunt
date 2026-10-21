@@ -14,7 +14,7 @@ there are no image assets.
 
 ## Conventions
 
-- **The look is the point.** Internal render resolution is 320×180, upscaled
+- **The look is the point.** Internal render resolution is 480×270, upscaled
   with nearest-neighbour. Never add smoothing, anti-aliasing, or high-res
   rendering paths. Lighting is quantised into bands (`LIGHT_BANDS`) — keep it.
 - **All art is procedural.** Textures in `textures.ts`, sprite bitmaps in
