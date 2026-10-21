@@ -6,6 +6,7 @@ export interface Settings {
   fov: number; // radians
   brightness: number; // css filter on the display canvas
   grain: boolean; // film grain post effect
+  sound: boolean; // procedural ambience on/off
 }
 
 const SETTING_KEY = "plaguehunt.settings";
@@ -16,6 +17,7 @@ export const settings: Settings = {
   fov: Math.PI / 2.6,
   brightness: 1,
   grain: true,
+  sound: true,
 };
 
 export type Action =

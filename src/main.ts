@@ -54,6 +54,7 @@ import { grantClue } from "./clues";
 import { Renderer } from "./renderer";
 import { buildLantern, buildSpriteKinds, texCanvas, villagerVariants } from "./sprites";
 import { initMenu } from "./menu";
+import { initAudio } from "./audio";
 import {
   attractShamblerSprites,
   beginIntro,
@@ -241,7 +242,11 @@ resize();
 // --- overlays ---------------------------------------------------------------
 
 const journal = initJournal();
-const shop = initShop(icons, texCanvas, () => hud.setInventory(inv));
+const audio = initAudio();
+const shop = initShop(icons, texCanvas, () => {
+  hud.setInventory(inv);
+  audio.coin();
+});
 const autopsy = initAutopsy(() => {
   const q = quest.state;
   q.autopsies += 1;
@@ -320,6 +325,7 @@ if (settings.brightness !== 1) display.style.filter = `brightness(${settings.bri
 let introSeen = false;
 
 function lockIn(): void {
+  audio.resume(); // the click is the gesture the AudioContext needed
   display.requestPointerLock();
   if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
 }
@@ -400,6 +406,9 @@ initInput(display, (locked) => {
 
 let last = performance.now();
 let time = 0;
+// Footfalls and bell tolls — tracked against the clock and the head bob.
+let lastStep = 0;
+let lastPhase = "day";
 // Strafe lean — the view shears a touch when sidestepping, like Quake's roll.
 let viewRoll = 0;
 // The player's real pose while the menu's attract camera is borrowed.
@@ -422,9 +431,24 @@ function frame(now: number): void {
     }
     const daylight = daylightAt(tday);
 
+    // The church bell tolls the light in and out — thin and far away.
+    const phase = tday < 0.06 ? "dawn" : tday < 0.45 ? "day" : tday < 0.55 ? "dusk" : "night";
+    if (phase !== lastPhase) {
+      lastPhase = phase;
+      if (phase === "day" || phase === "dusk") audio.bell();
+    }
+
     // Exhaustion drags the legs and forbids running — sleep is the only fix.
     const exhausted = needs.fatigue <= EXHAUSTED;
     updatePlayer(player, dt, map, sprites, exhausted ? 0.62 : 1);
+
+    // A footfall on every half-cycle of the bob — the floor under you decides
+    // whether it clicks on stone, thuds on dirt or splashes in the channel.
+    const stepNow = Math.floor(player.bobPhase / Math.PI);
+    if (stepNow !== lastStep) {
+      lastStep = stepNow;
+      audio.step(map.floorTex[Math.floor(player.y) * map.w + Math.floor(player.x)]);
+    }
     updateDoors(map, dt, player.x, player.y);
     updateNeeds(needs, dt, player.running);
     updateVillagers(villagers, dt, daylight, tday, map, player);
@@ -509,7 +533,10 @@ function frame(now: number): void {
       const obscured = journal.isOpen() || mapOpen;
       if (dlg.lineIdx < dlg.lines.length) {
         hud.setDialog(dlg.speaker, dlg.lines[dlg.lineIdx], true);
-        if (!obscured && consumePress(binds.interact)) dlg.lineIdx++;
+        if (!obscured && consumePress(binds.interact)) {
+          dlg.lineIdx++;
+          audio.tick();
+        }
       } else if (dlg.topics && dlg.topics.length > 0) {
         hud.setDialog(
           dlg.speaker,
@@ -528,7 +555,10 @@ function frame(now: number): void {
         }
         if (pick >= 0) {
           const t = dlg.topics[pick];
-          if (t && topicAvailable(dlg, t)) t.run(dlg, inv, day);
+          if (t && topicAvailable(dlg, t)) {
+            t.run(dlg, inv, day);
+            audio.tick();
+          }
         } else if (!obscured && consumePress(binds.interact)) {
           endDialog(dlg);
         }
@@ -693,6 +723,25 @@ function frame(now: number): void {
         menuUp ? attractShamblerSprites(spriteKinds.shambler.frames, spriteKinds.shambler.scale) : [],
         extras
       );
+
+  // The city's sound — wind and fire built from what the scene already knows.
+  let fireNear = 0;
+  for (const l of sceneLights) {
+    if (l.warm < 0.4) continue;
+    const d = Math.hypot(l.x - player.x, l.y - player.y);
+    if (d < l.radius) fireNear = Math.max(fireNear, (1 - d / l.radius) * Math.min(1, l.intensity));
+  }
+  let dread = 0;
+  if (figure.active) {
+    dread = Math.max(0, 1 - Math.hypot(figure.x - player.x, figure.y - player.y) / 14);
+  }
+  if (wightsWoken && !quest.state.grateSealed && player.y >= 60) {
+    dread = Math.max(dread, 0.35);
+    for (const w of wights) {
+      dread = Math.max(dread, 1 - Math.hypot(w.x - player.x, w.y - player.y) / 10);
+    }
+  }
+  audio.update(dt, { daylight, inSewer: player.y >= 60, fireNear, dread });
   renderer.render(sceneMap, textures, allSprites, sceneLights, player, time, ambient, daylight, menuUp ? 0.8 : iLight ? iLight.sunT : tday, fogNear, fogFar);
 
   // The lantern in the left hand — hidden in menus, but out for the intro's

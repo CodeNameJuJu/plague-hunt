@@ -150,6 +150,20 @@ export function initMenu(display: HTMLCanvasElement, onDescend: () => void): Men
   });
   grainRow.append(grainLabel, grainBox, document.createElement("b"));
   settingsPage.appendChild(grainRow);
+
+  const soundRow = document.createElement("div");
+  soundRow.className = "setrow";
+  const soundLabel = document.createElement("span");
+  soundLabel.textContent = "sound";
+  const soundBox = document.createElement("input");
+  soundBox.type = "checkbox";
+  soundBox.checked = settings.sound;
+  soundBox.addEventListener("change", () => {
+    settings.sound = soundBox.checked;
+    saveSettings();
+  });
+  soundRow.append(soundLabel, soundBox, document.createElement("b"));
+  settingsPage.appendChild(soundRow);
   settingsPage.appendChild(backBtn());
   pages.appendChild(settingsPage);
 
